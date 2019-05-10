@@ -11,7 +11,6 @@ class Logger:
         self.results_filename = "seed_" + str(data_info.seed)
         self.results_foldername = 'results/' + data_info.dataset + \
                                   '-T_' + str(data_info.n_tr_tasks) + \
-                                  '-v_' + str(data_info.val_points_pct) + \
                                   '/' + training_info.method
 
         if not os.path.exists('results'):
@@ -33,6 +32,7 @@ class Logger:
         f.close()
 
     @staticmethod
-    def log_specific_object(logging_object):
+    def log_event(logging_object):
         # Logging_object is a string
+        print(logging_object)
         logging.critical(logging_object)

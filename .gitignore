@@ -1,0 +1,19 @@
+# general
+*.png
+*.html
+*.pdf
+*.pyc
+*.pckl
+*.log
+*.swo
+*.xml
+
+# user settings
+.gitattributes
+
+venv/
+.idea/
+_pycache_/
+results/
+logs/
+archive/

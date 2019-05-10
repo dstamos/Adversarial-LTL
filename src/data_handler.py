@@ -7,10 +7,8 @@ class DataHandler:
     def __init__(self, data_info):
         self.data_info = data_info
         self.features_tr = [None] * data_info.n_all_tasks
-        self.features_val = [None] * data_info.n_all_tasks
         self.features_ts = [None] * data_info.n_all_tasks
         self.labels_tr = [None] * data_info.n_all_tasks
-        self.labels_val = [None] * data_info.n_all_tasks
         self.labels_ts = [None] * data_info.n_all_tasks
 
         self.tr_task_indexes = None
@@ -39,18 +37,9 @@ class DataHandler:
             noisy_labels = self.data_info.noise_std * np.random.randn(self.data_info.n_all_points)
 
             # split into training and test
-            tr_val_indexes, ts_indexes = train_test_split(np.arange(0, self.data_info.n_all_points), test_size=1 - self.data_info.ts_points_pct)
-            if task_idx < self.data_info.n_tr_tasks:
-                features_tr = features[tr_val_indexes]
-                labels_tr = noisy_labels[tr_val_indexes]
-            else:
-                tr_indexes, val_indexes = train_test_split(tr_val_indexes, test_size=self.data_info.val_points_pct)
-                features_tr = features[tr_indexes]
-                labels_tr = noisy_labels[tr_indexes]
-                features_val = features[val_indexes]
-                labels_val = noisy_labels[val_indexes]
-                self.features_val[task_idx] = features_val
-                self.labels_val[task_idx] = labels_val
+            tr_indexes, ts_indexes = train_test_split(np.arange(0, self.data_info.n_all_points), test_size=self.data_info.ts_points_pct)
+            features_tr = features[tr_indexes]
+            labels_tr = noisy_labels[tr_indexes]
 
             features_ts = features[ts_indexes]
             labels_ts = clean_labels[ts_indexes]
