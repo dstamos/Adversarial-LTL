@@ -4,7 +4,7 @@ from sklearn.metrics import mean_squared_error
 
 
 class LearningToLearnD:
-    def __init__(self, data_info, logger, meta_algo_regul_param=1e+1, inner_regul_param=10, verbose=1):
+    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=10, verbose=1):
         self.verbose = verbose
         self.data_info = data_info
         self.logger = logger
@@ -42,7 +42,7 @@ class LearningToLearnD:
             # TODO Test error (maybe validation?), logging, printouts
             predictions_ts = []
             for test_task_idx, test_task in enumerate(data.test_task_indexes):
-                print(test_task_idx)
+                # print(test_task_idx)
                 predictions_ts.append(self.predict(representation_d, data.features_ts[test_task], data.labels_ts[test_task]))
             test_scores.append(mtl_mse_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
 
@@ -58,15 +58,35 @@ class LearningToLearnD:
         # Call MSE
 
     def inner_algo(self, representation_d, features, labels, inner_algo_method='algo_1'):
-        # FIXME Where are the labels used? Define loss etc
+        def absolute_loss(curr_features, curr_labels, weight_vector):
+            n_points = curr_features.shape[0]
+            loss = 0
+            for point_idx in range(n_points):
+                loss = loss + np.abs(curr_labels[point_idx] - curr_features[point_idx, :] @ weight_vector)
+            return loss / n_points
+
+        if inner_algo_method == 'algo_1':
+            def penalty(weight_vector, n_points):
+                return self.inner_regul_param / (2*n_points) * np.linalg.norm(weight_vector, ord=2) ** 2
+        elif inner_algo_method == 'algo_2':
+            def penalty(weight_vector):
+                return self.inner_regul_param * np.linalg.norm(weight_vector, ord=2)**2
+        else:
+            raise ValueError("Unknown inner algorithm.")
+
         curr_u = np.zeros(self.data_info.n_dims)
         curr_w_d = np.zeros(self.data_info.n_dims)
         moving_average_approx_subgradient = curr_u
-        movinga_average_weights = curr_w_d
+        moving_average_weights = curr_w_d
         for curr_point_idx in range(features.shape[0]):
             prev_u = curr_u
-            # FIXME
-            u = 0.01 * np.random.randn()
+
+            pred = sp.linalg.sqrtm(representation_d) @ features[curr_point_idx, :] @ prev_u
+            true = labels[curr_point_idx]
+            if true > pred:
+                u = true - 1
+            else:
+                u = -(true - 1)
             if inner_algo_method == 'algo_1':
                 curr_u = prev_u - 1 / self.inner_regul_param * sp.linalg.sqrtm(representation_d) @ features[curr_point_idx, :] * u
             elif inner_algo_method == 'algo_2':
@@ -75,11 +95,11 @@ class LearningToLearnD:
                 raise ValueError("Unknown inner algorithm.")
             curr_w_d = sp.linalg.sqrtm(representation_d) @ curr_u
 
-            movinga_average_weights = (movinga_average_weights * (curr_point_idx + 1) + curr_w_d * 1) / (curr_point_idx + 2)
+            moving_average_weights = (moving_average_weights * (curr_point_idx + 1) + curr_w_d * 1) / (curr_point_idx + 2)
             moving_average_approx_subgradient = (moving_average_approx_subgradient * (curr_point_idx + 1) + curr_u * 1) / (curr_point_idx + 2)
 
         # approx_grad = np.random.randn(n_dims, n_dims)
-        return moving_average_approx_subgradient, movinga_average_weights
+        return moving_average_approx_subgradient, moving_average_weights
 
     def predict(self, representation_d, features, labels):
         _, weight_vector = self.inner_algo(representation_d, features, labels)
