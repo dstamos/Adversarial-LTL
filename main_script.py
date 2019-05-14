@@ -13,7 +13,7 @@ if __name__ == "__main__":
                       'n_all_tasks': 300,
                       'n_tr_tasks': 100,
                       'n_val_tasks': 50,
-                      'n_all_points': 50,
+                      'n_all_points': 30,
                       'ts_points_pct': 0.5,
                       'n_dims': 10,
                       'noise_std': 0.0,

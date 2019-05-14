@@ -5,7 +5,7 @@ from sklearn.metrics import mean_squared_error
 
 
 class LearningToLearnD:
-    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=100, verbose=1):
+    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=1, verbose=1):
         self.verbose = verbose
         self.data_info = data_info
         self.logger = logger
@@ -83,34 +83,60 @@ class LearningToLearnD:
         # Call MSE
 
     def inner_algo(self, representation_d, features, labels, inner_algo_method='algo_w', train_plot=0):
-        def absolute_loss(curr_features, curr_labels, weight_vector, d_sqrt=None):
-            n_points = curr_features.shape[0]
-            if inner_algo_method == 'algo_v':
-                loss = np.sum(np.abs(curr_labels - curr_features @ d_sqrt @ weight_vector))
-            elif inner_algo_method == 'algo_w':
-                loss = np.sum(np.abs(curr_labels - curr_features @ weight_vector))
-            else:
-                raise ValueError("Unknown inner algorithm.")
-            return loss / n_points
 
-        def penalty(weight_vector, d_sqrt=None):
-            if inner_algo_method == 'algo_v':
+        representation_d_sqrt = sp.linalg.sqrtm(representation_d)
+        representation_inv = np.linalg.pinv(representation_d)
+        n_points = features.shape[0]
+
+        if inner_algo_method == 'algo_v':
+            def absolute_loss(curr_features, curr_labels, weight_vector):
+                n_points = curr_features.shape[0]
+                loss = np.sum(np.abs(curr_labels - curr_features @ representation_d_sqrt @ weight_vector))
+                loss = loss / n_points
+                return loss
+
+            def penalty(weight_vector):
                 penalty_output = self.inner_regul_param / 2 * np.linalg.norm(weight_vector, ord=2) ** 2
-            elif inner_algo_method == 'algo_w':
-                penalty_output = self.inner_regul_param / 2 * weight_vector @ np.linalg.pinv(d_sqrt) @ weight_vector
-            else:
-                raise ValueError("Unknown inner algorithm.")
-            return penalty_output
+                return penalty_output
+
+            def subgradient(label, feature, weight_vector):
+                pred = feature @ representation_d_sqrt @ weight_vector
+                u = np.sign(label - pred) * (label - weight_vector)
+                return u
+
+            def update_step(weight_vector, inner_iteration, epoch):
+                # FIXME curr_point_idx + i * len(points)
+                new_weight_vector = weight_vector - 1 / (self.inner_regul_param * (epoch*n_points + inner_iteration + 1)) * \
+                                    (representation_d_sqrt @ features[inner_iteration, :] * u + self.inner_regul_param * weight_vector)
+                return new_weight_vector
+        elif inner_algo_method == 'algo_w':
+            def absolute_loss(curr_features, curr_labels, weight_vector):
+                loss = np.sum(np.abs(curr_labels - curr_features @ weight_vector))
+                return loss
+
+            def penalty(weight_vector):
+                penalty_output = self.inner_regul_param / 2 * weight_vector @ representation_inv @ weight_vector
+                return penalty_output
+
+            def subgradient(label, feature, weight_vector):
+                pred = feature @ weight_vector
+                u = np.sign(label - pred) * (label - weight_vector)
+                return u
+
+            def update_step(weight_vector, inner_iteration, epoch):
+                # FIXME curr_point_idx + i * len(points)
+                new_weight_vector = weight_vector - 1 / (self.inner_regul_param * (epoch*n_points + inner_iteration + 1)) * \
+                                    representation_d @ (features[inner_iteration, :] * u + self.inner_regul_param * representation_inv @ weight_vector)
+                return new_weight_vector
+        else:
+            raise ValueError("Unknown inner algorithm.")
 
         curr_weight_vector = np.zeros(self.data_info.n_dims)
         moving_average_weights = curr_weight_vector
         obj = []
 
-        representation_d_sqrt = sp.linalg.sqrtm(representation_d)
-        representation_inv = np.linalg.pinv(representation_d)
-
         big_fucking_counter = 0
-        for i in range(100):
+        for i in range(10):
             for curr_point_idx in range(features.shape[0]):
                 big_fucking_counter = big_fucking_counter + 1
                 prev_weight_vector = curr_weight_vector
@@ -118,29 +144,16 @@ class LearningToLearnD:
                 print(curr_weight_vector)
 
                 # Compute subgradient
-                true = labels[curr_point_idx]
-                if inner_algo_method == 'algo_v':
-                    pred = features[curr_point_idx, :] @ representation_d_sqrt @ prev_weight_vector
-                elif inner_algo_method == 'algo_w':
-                    pred = features[curr_point_idx, :] @ prev_weight_vector
-                else:
-                    raise ValueError("Unknown inner algorithm.")
-                u = np.sign(true - pred) * (true - pred)
+                u = subgradient(labels[curr_point_idx], features[curr_point_idx], prev_weight_vector)
 
                 # Update
-                if inner_algo_method == 'algo_v':
-                    curr_weight_vector = prev_weight_vector - 1 / (self.inner_regul_param * (curr_point_idx + i + 1)) * \
-                                         (representation_d_sqrt @ features[curr_point_idx, :] * u + self.inner_regul_param * prev_weight_vector)
-                elif inner_algo_method == 'algo_w':
-                    curr_weight_vector = prev_weight_vector - 1 / (self.inner_regul_param * (curr_point_idx + i + 1)) * \
-                                         representation_d @ (features[curr_point_idx, :] * u + self.inner_regul_param * representation_inv @ prev_weight_vector)
-                else:
-                    raise ValueError("Unknown inner algorithm.")
+                curr_weight_vector = update_step(prev_weight_vector, curr_point_idx, i)
 
                 # TODO recheck the computation of the moving average
-                moving_average_weights = (moving_average_weights * (big_fucking_counter + 1) + curr_weight_vector * 1) / (big_fucking_counter + 2)
+                # moving_average_weights = (moving_average_weights * (big_fucking_counter + 1) + curr_weight_vector * 1) / (big_fucking_counter + 2)
+                moving_average_weights = curr_weight_vector
 
-                obj.append(absolute_loss(features, labels, moving_average_weights, representation_d_sqrt) + penalty(moving_average_weights, representation_d_sqrt))
+                obj.append(absolute_loss(features, labels, moving_average_weights) + penalty(moving_average_weights))
                 # print("online optimization | point: %4d | average loss: %7.5f" % (curr_point_idx, obj[-1]))
         last_weights = curr_weight_vector
         if train_plot == 1:
