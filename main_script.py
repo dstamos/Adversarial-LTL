@@ -7,19 +7,21 @@ from sklearn.model_selection import GridSearchCV
 
 
 if __name__ == "__main__":
+    np.random.seed(999)
+
     data_info_dict = {'dataset': 'synthetic',
                       'n_all_tasks': 300,
                       'n_tr_tasks': 100,
                       'n_val_tasks': 50,
-                      'n_all_points': 100,
-                      'ts_points_pct': 75,
-                      'n_dims': 50,
-                      'noise_std': 0.25,
+                      'n_all_points': 50,
+                      'ts_points_pct': 0.5,
+                      'n_dims': 10,
+                      'noise_std': 0.0,
                       'seed': 999}
 
     training_info_dict = {'method': 'temp_method',
                           'inner_regul_param': [10 ** float(i) for i in range(1, 16)],
-                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-7, 3, 70)],
+                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-7, 3, 4)],
                           'convergence_tol': 10 ** -4}
 
     data_info = DataSettings(data_info_dict)

@@ -30,11 +30,11 @@ class DataHandler:
             # generating and normalizing the weight vectors
             weight_vector = np.zeros((self.data_info.n_dims, 1))
             weight_vector[fixed_sparsity] = np.random.randn(sparsity, 1)
-            weight_vector = (weight_vector / norm(weight_vector)).ravel() * np.random.randint(1, 10)
+            weight_vector = (weight_vector / norm(weight_vector)).ravel()  # * np.random.randint(1, 10)
 
             # generating labels and adding noise
             clean_labels = features @ weight_vector
-            noisy_labels = self.data_info.noise_std * np.random.randn(self.data_info.n_all_points)
+            noisy_labels = clean_labels + self.data_info.noise_std * np.random.randn(self.data_info.n_all_points)
 
             # split into training and test
             tr_indexes, ts_indexes = train_test_split(np.arange(0, self.data_info.n_all_points), test_size=self.data_info.ts_points_pct)
@@ -42,7 +42,8 @@ class DataHandler:
             labels_tr = noisy_labels[tr_indexes]
 
             features_ts = features[ts_indexes]
-            labels_ts = clean_labels[ts_indexes]
+            # labels_ts = clean_labels[ts_indexes]
+            labels_ts = noisy_labels[ts_indexes]
 
             self.features_tr[task_idx] = features_tr
             self.features_ts[task_idx] = features_ts
