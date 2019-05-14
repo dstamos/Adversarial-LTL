@@ -5,7 +5,7 @@ from sklearn.metrics import mean_squared_error
 
 
 class LearningToLearnD:
-    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=1, verbose=1):
+    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=0.001, verbose=1):
         self.verbose = verbose
         self.data_info = data_info
         self.logger = logger
@@ -45,22 +45,11 @@ class LearningToLearnD:
             matrix_m = sp.linalg.expm(-curr_theta/self.meta_algo_regul_param)
 
             # Rescale
-            try:
-                curr_representation_d = matrix_m / np.trace(matrix_m)
-                print(curr_representation_d)
-                print(np.all(np.isnan(curr_representation_d)))
-            except:
-                k = 1
-
-            if np.all(np.isnan(curr_representation_d)) == True:
-                k = 1
+            curr_representation_d = matrix_m / np.trace(matrix_m)
 
             # Average:
             representation_d = (representation_d * (task_idx + 1) + curr_representation_d * 1) / (task_idx + 2)
             self.representation_d = representation_d
-
-            if np.all(np.isnan(representation_d)) == True:
-                k = 1
 
             # total.append(error)
             # printout = "T: %(task)3d | train score: %(ts_score)6.4f" % {'task': task, 'ts_score': float(np.mean(total))}
@@ -85,8 +74,8 @@ class LearningToLearnD:
     def inner_algo(self, representation_d, features, labels, inner_algo_method='algo_w', train_plot=0):
 
         representation_d_sqrt = sp.linalg.sqrtm(representation_d)
-        representation_inv = np.linalg.pinv(representation_d)
-        n_points = features.shape[0]
+        representation_d_inv = np.linalg.pinv(representation_d)
+        total_n_points = features.shape[0]
 
         if inner_algo_method == 'algo_v':
             def absolute_loss(curr_features, curr_labels, weight_vector):
@@ -106,7 +95,7 @@ class LearningToLearnD:
 
             def update_step(weight_vector, inner_iteration, epoch):
                 # FIXME curr_point_idx + i * len(points)
-                new_weight_vector = weight_vector - 1 / (self.inner_regul_param * (epoch*n_points + inner_iteration + 1)) * \
+                new_weight_vector = weight_vector - 1 / (self.inner_regul_param * (epoch*total_n_points + inner_iteration + 1)) * \
                                     (representation_d_sqrt @ features[inner_iteration, :] * u + self.inner_regul_param * weight_vector)
                 return new_weight_vector
         elif inner_algo_method == 'algo_w':
@@ -115,18 +104,18 @@ class LearningToLearnD:
                 return loss
 
             def penalty(weight_vector):
-                penalty_output = self.inner_regul_param / 2 * weight_vector @ representation_inv @ weight_vector
+                penalty_output = self.inner_regul_param / 2 * weight_vector @ representation_d_inv @ weight_vector
                 return penalty_output
 
             def subgradient(label, feature, weight_vector):
                 pred = feature @ weight_vector
-                u = np.sign(label - pred) * (label - weight_vector)
-                return u
+                subgrad = np.sign(pred - label)
+                return subgrad
 
-            def update_step(weight_vector, inner_iteration, epoch):
-                # FIXME curr_point_idx + i * len(points)
-                new_weight_vector = weight_vector - 1 / (self.inner_regul_param * (epoch*n_points + inner_iteration + 1)) * \
-                                    representation_d @ (features[inner_iteration, :] * u + self.inner_regul_param * representation_inv @ weight_vector)
+            def update_step(weight_vector, inner_iteration, subgrad, curr_epoch):
+                step = 1 / (self.inner_regul_param * (curr_epoch*total_n_points + inner_iteration + 1))
+                full_subgrad = representation_d @ (features[inner_iteration, :] * subgrad + self.inner_regul_param * representation_d_inv @ weight_vector)
+                new_weight_vector = weight_vector - step * full_subgrad
                 return new_weight_vector
         else:
             raise ValueError("Unknown inner algorithm.")
@@ -136,25 +125,21 @@ class LearningToLearnD:
         obj = []
 
         big_fucking_counter = 0
-        for i in range(10):
+        for epoch in range(5):
             for curr_point_idx in range(features.shape[0]):
                 big_fucking_counter = big_fucking_counter + 1
                 prev_weight_vector = curr_weight_vector
-
-                print(curr_weight_vector)
 
                 # Compute subgradient
                 u = subgradient(labels[curr_point_idx], features[curr_point_idx], prev_weight_vector)
 
                 # Update
-                curr_weight_vector = update_step(prev_weight_vector, curr_point_idx, i)
+                curr_weight_vector = update_step(prev_weight_vector, curr_point_idx, u, epoch)
 
-                # TODO recheck the computation of the moving average
-                # moving_average_weights = (moving_average_weights * (big_fucking_counter + 1) + curr_weight_vector * 1) / (big_fucking_counter + 2)
-                moving_average_weights = curr_weight_vector
+                moving_average_weights = (moving_average_weights * (curr_point_idx + 1) + curr_weight_vector * 1) / (curr_point_idx + 2)
 
                 obj.append(absolute_loss(features, labels, moving_average_weights) + penalty(moving_average_weights))
-                # print("online optimization | point: %4d | average loss: %7.5f" % (curr_point_idx, obj[-1]))
+                # print("online optimization | point: %4d | average loss: %9.5f" % (curr_point_idx, obj[-1]))
         last_weights = curr_weight_vector
         if train_plot == 1:
             plt.plot(obj)
