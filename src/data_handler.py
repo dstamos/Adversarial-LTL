@@ -30,7 +30,7 @@ class DataHandler:
             # generating and normalizing the weight vectors
             weight_vector = np.zeros((self.data_info.n_dims, 1))
             weight_vector[fixed_sparsity] = np.random.randn(sparsity, 1)
-            weight_vector = (weight_vector / norm(weight_vector)).ravel()  # * np.random.randint(1, 10)
+            weight_vector = (weight_vector / norm(weight_vector)).ravel() * np.random.randint(1, 10)
 
             # generating labels and adding noise
             clean_labels = features @ weight_vector

@@ -1,20 +1,23 @@
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 
 
 class LearningToLearnD:
-    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=0.001, verbose=1):
+    def __init__(self, data_info, logger, meta_algo_regul_param=1e+3, inner_regul_param=0.01, verbose=1):
         self.verbose = verbose
         self.data_info = data_info
         self.logger = logger
         self.meta_algo_regul_param = meta_algo_regul_param
         self.inner_regul_param = inner_regul_param
 
+        self.results = {'val_score': 0, 'test_scores': []}
+
         self.representation_d = None
 
     def fit(self, data):
+        print('Optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = data.data_info.n_dims
 
         test_scores = []
@@ -23,16 +26,14 @@ class LearningToLearnD:
         curr_representation_d = np.eye(n_dims) / n_dims
         representation_d = curr_representation_d
 
-        total = []
         for task_idx, task in enumerate(data.tr_task_indexes):
             prev_theta = curr_theta
 
-            curr_u, weight_vector, error = self.inner_algo(curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=1)
+            loss_subgradient, _, error = self.inner_algo(curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
 
             # Approximate the gradient
-            # approx_grad = np.linalg.pinv(sp.linalg.sqrtm(curr_representation_d)) @ curr_u
-            g = np.linalg.lstsq(sp.linalg.sqrtm(curr_representation_d), curr_u, rcond=-1)[0]
-            approx_grad = - self.inner_regul_param / (2 * data.features_tr[task].shape[0]) * np.outer(g, g)
+            g = data.features_tr[task].T @ loss_subgradient
+            approx_grad = - 1 / (2 * self.inner_regul_param * data.features_tr[task].shape[0] ** 2) * np.outer(g, g)
 
             # representation_d = representation_d - 1/self.meta_algo_regul_param * approx_grad
             #
@@ -49,27 +50,29 @@ class LearningToLearnD:
 
             # Average:
             representation_d = (representation_d * (task_idx + 1) + curr_representation_d * 1) / (task_idx + 2)
-            self.representation_d = representation_d
 
-            # total.append(error)
-            # printout = "T: %(task)3d | train score: %(ts_score)6.4f" % {'task': task, 'ts_score': float(np.mean(total))}
+            self.representation_d = representation_d
 
             predictions_ts = []
             for test_task_idx, test_task in enumerate(data.test_task_indexes):
-                # print("test task: %3d" % test_task)
                 predictions_ts.append(self.predict(representation_d, data.features_ts[test_task], data.labels_ts[test_task]))
-            test_scores.append(mtl_mse_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
+            test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
 
-            printout = "T: %(task)3d | test score: %(ts_score)6.4f" % {'task': task, 'ts_score': float(np.mean(test_scores))}
-            self.logger.log_event(printout)
+            # printout = "T: %(task)3d | test score: %(ts_score)6.4f" % {'task': task, 'ts_score': float(np.mean(test_scores))}
+            # self.logger.log_event(printout)
+
+        plt.plot(test_scores)
+        plt.title('test scores')
+        plt.show()
 
         # TODO Optimization wrt w on val tasks, training points
-        # Reuse the same function as Algo 1 or 2 but just return w
-        # for task_idx, task in enumerate(data.val_task_indexes):
-        #     _, weight_vector = self.inner_algo(self.representation_d, data.features_ts[task], data.labels_ts[task])
+        val_scores = []
+        for val_task_idx, val_task in enumerate(data.val_task_indexes):
+            predictions_val = self.predict(representation_d, data.features_ts[val_task], data.labels_ts[val_task])
+            val_scores.append(mtl_mae_scorer([predictions_val], [data.labels_ts[val_task]]))
 
-        # TODO Performance check of (D, w) on val tasks, validation points
-        # Call MSE
+        self.results['val_score'] = np.average(val_scores)
+        self.results['test_scores'] = test_scores
 
     def inner_algo(self, representation_d, features, labels, inner_algo_method='algo_w', train_plot=0):
 
@@ -90,12 +93,12 @@ class LearningToLearnD:
 
             def subgradient(label, feature, weight_vector):
                 pred = feature @ representation_d_sqrt @ weight_vector
-                u = np.sign(label - pred) * (label - weight_vector)
-                return u
+                subgrad_u = np.sign(label - pred) * (label - weight_vector)
+                return subgrad_u
 
-            def update_step(weight_vector, inner_iteration, epoch):
+            def update_step(weight_vector, inner_iteration, epoch_idx):
                 # FIXME curr_point_idx + i * len(points)
-                new_weight_vector = weight_vector - 1 / (self.inner_regul_param * (epoch*total_n_points + inner_iteration + 1)) * \
+                new_weight_vector = weight_vector - 1 / (self.inner_regul_param * (epoch_idx*total_n_points + inner_iteration + 1)) * \
                                     (representation_d_sqrt @ features[inner_iteration, :] * u + self.inner_regul_param * weight_vector)
                 return new_weight_vector
         elif inner_algo_method == 'algo_w':
@@ -114,6 +117,7 @@ class LearningToLearnD:
 
             def update_step(weight_vector, inner_iteration, subgrad, curr_epoch):
                 step = 1 / (self.inner_regul_param * (curr_epoch*total_n_points + inner_iteration + 1))
+                # TODO Change the pinv based on the computations in the paper
                 full_subgrad = representation_d @ (features[inner_iteration, :] * subgrad + self.inner_regul_param * representation_d_inv @ weight_vector)
                 new_weight_vector = weight_vector - step * full_subgrad
                 return new_weight_vector
@@ -122,38 +126,40 @@ class LearningToLearnD:
 
         curr_weight_vector = np.zeros(self.data_info.n_dims)
         moving_average_weights = curr_weight_vector
+        subgradient_vector = np.zeros(total_n_points)
         obj = []
 
         big_fucking_counter = 0
         for epoch in range(5):
+            subgradient_vector = np.zeros(total_n_points)
+            # TODO Shuffle points if we do multiple epochs?
             for curr_point_idx in range(features.shape[0]):
                 big_fucking_counter = big_fucking_counter + 1
                 prev_weight_vector = curr_weight_vector
 
                 # Compute subgradient
                 u = subgradient(labels[curr_point_idx], features[curr_point_idx], prev_weight_vector)
+                subgradient_vector[curr_point_idx] = u
 
                 # Update
                 curr_weight_vector = update_step(prev_weight_vector, curr_point_idx, u, epoch)
 
-                moving_average_weights = (moving_average_weights * (curr_point_idx + 1) + curr_weight_vector * 1) / (curr_point_idx + 2)
+                moving_average_weights = (moving_average_weights * (big_fucking_counter + 1) + curr_weight_vector * 1) / (big_fucking_counter + 2)
 
                 obj.append(absolute_loss(features, labels, moving_average_weights) + penalty(moving_average_weights))
                 # print("online optimization | point: %4d | average loss: %9.5f" % (curr_point_idx, obj[-1]))
-        last_weights = curr_weight_vector
+        # last_weights = curr_weight_vector
+        # print(absolute_loss(features, labels, moving_average_weights))
         if train_plot == 1:
             plt.plot(obj)
             plt.pause(0.01)
-        return last_weights, moving_average_weights, obj[-1]
+
+        return subgradient_vector, moving_average_weights, absolute_loss(features, labels, moving_average_weights)
 
     def predict(self, representation_d, features, labels):
-        try:
-            _, weight_vector, _ = self.inner_algo(representation_d, features, labels)
-        except:
-            k = 1
+        _, weight_vector, _ = self.inner_algo(representation_d, features, labels)
         # TODO Add label recovery operation
         predictions = np.random.randn(features.shape[0])
-
         return predictions
 
     def get_params(self):
@@ -165,12 +171,12 @@ class LearningToLearnD:
         return self
 
 
-def mtl_mse_scorer(predictions, true_labels):
+def mtl_mae_scorer(predictions, true_labels):
     n_tasks = len(true_labels)
 
     metric = 0
     for task_idx in range(n_tasks):
-        c_metric = mean_squared_error(true_labels[task_idx], predictions[task_idx])
+        c_metric = mean_absolute_error(true_labels[task_idx], predictions[task_idx])
         metric = metric + c_metric
     metric = metric / n_tasks
 
@@ -223,25 +229,8 @@ def psd_trace_projection(matrix_d, constraint):
 
     return d_proj
 
-# TODO 1) Input: tr_tasks_tr_sets, val_tasks_tr_sets, val_tasks_val_sets
-# TODO    Output: (D_η, c)
-# TODO       a) Call the optimizer wrt D
-# TODO       b) Call the optimizer wrt w
-# TODO       c) Predict labels given a (D, w) pair
-# TODO       d) Check score given a list of true and pred labels
 
+class MyGridSearch:
+    def __init__(self, verbose=1):
+        pass
 
-# np.random.seed(2)
-# vec = [0, 1, 2, 3, 4, 5]
-# everything = [3] * len(vec)
-# curr = 0
-# moving_average = curr
-# for i in range(len(vec)):
-#     prev = curr
-#     curr = np.random.randn()
-#
-#     everything[i] = curr
-#     moving_average = (moving_average*i + curr*1) / (i+1)
-#
-# print(moving_average)
-# print(np.mean(everything))
