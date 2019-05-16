@@ -1,11 +1,12 @@
 import numpy as np
 import scipy as sp
+import time
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error
 
 
 class LearningToLearnD:
-    def __init__(self, data_info, logger, meta_algo_regul_param=1e+3, inner_regul_param=0.01, verbose=1):
+    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=0.1, verbose=1):
         self.verbose = verbose
         self.data_info = data_info
         self.logger = logger
@@ -23,30 +24,30 @@ class LearningToLearnD:
         test_scores = []
 
         curr_theta = np.zeros((n_dims, n_dims))
-        curr_representation_d = np.eye(n_dims) / n_dims
-        representation_d = curr_representation_d
+        representation_d = np.eye(n_dims) / n_dims
 
+        tt = time.time()
         for task_idx, task in enumerate(data.tr_task_indexes):
             prev_theta = curr_theta
 
-            loss_subgradient, _, error = self.inner_algo(curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
+            loss_subgradient, _, _ = self.inner_algo(representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
 
             # Approximate the gradient
             g = data.features_tr[task].T @ loss_subgradient
             approx_grad = - 1 / (2 * self.inner_regul_param * data.features_tr[task].shape[0] ** 2) * np.outer(g, g)
 
-            # representation_d = representation_d - 1/self.meta_algo_regul_param * approx_grad
-            #
-            # representation_d = psd_trace_projection(representation_d, 1)
-
             # Update Theta
             curr_theta = prev_theta + approx_grad
 
-            # Compute M
-            matrix_m = sp.linalg.expm(-curr_theta/self.meta_algo_regul_param)
+            # # Compute M
+            # matrix_m = sp.linalg.expm(-curr_theta/self.meta_algo_regul_param)
+            #
+            # # Rescale
+            # curr_representation_d = matrix_m / np.trace(matrix_m)
 
-            # Rescale
-            curr_representation_d = matrix_m / np.trace(matrix_m)
+            curr_representation_d = - 1/self.meta_algo_regul_param * curr_theta + np.eye(n_dims) / n_dims
+
+            curr_representation_d = psd_trace_projection(curr_representation_d, 1)
 
             # Average:
             representation_d = (representation_d * (task_idx + 1) + curr_representation_d * 1) / (task_idx + 2)
@@ -58,8 +59,9 @@ class LearningToLearnD:
                 predictions_ts.append(self.predict(representation_d, data.features_ts[test_task], data.labels_ts[test_task]))
             test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
 
-            # printout = "T: %(task)3d | test score: %(ts_score)6.4f" % {'task': task, 'ts_score': float(np.mean(test_scores))}
-            # self.logger.log_event(printout)
+            printout = "T: %(task)3d | test score: %(ts_score)6.4f | time: %(time)7.2f" % \
+                       {'task': task, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
+            self.logger.log_event(printout)
 
         plt.plot(test_scores)
         plt.title('test scores')
@@ -103,7 +105,8 @@ class LearningToLearnD:
                 return new_weight_vector
         elif inner_algo_method == 'algo_w':
             def absolute_loss(curr_features, curr_labels, weight_vector):
-                loss = np.sum(np.abs(curr_labels - curr_features @ weight_vector))
+                loss = np.linalg.norm(curr_labels - curr_features @ weight_vector, ord=1)
+                loss = loss / total_n_points
                 return loss
 
             def penalty(weight_vector):
@@ -130,7 +133,7 @@ class LearningToLearnD:
         obj = []
 
         big_fucking_counter = 0
-        for epoch in range(5):
+        for epoch in range(1):
             subgradient_vector = np.zeros(total_n_points)
             # TODO Shuffle points if we do multiple epochs?
             for curr_point_idx in range(features.shape[0]):
@@ -148,7 +151,6 @@ class LearningToLearnD:
 
                 obj.append(absolute_loss(features, labels, moving_average_weights) + penalty(moving_average_weights))
                 # print("online optimization | point: %4d | average loss: %9.5f" % (curr_point_idx, obj[-1]))
-        # last_weights = curr_weight_vector
         # print(absolute_loss(features, labels, moving_average_weights))
         if train_plot == 1:
             plt.plot(obj)
@@ -158,8 +160,7 @@ class LearningToLearnD:
 
     def predict(self, representation_d, features, labels):
         _, weight_vector, _ = self.inner_algo(representation_d, features, labels)
-        # TODO Add label recovery operation
-        predictions = np.random.randn(features.shape[0])
+        predictions = features @ weight_vector
         return predictions
 
     def get_params(self):
