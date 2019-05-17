@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.io as sio
 from numpy.linalg import norm
 from sklearn.model_selection import train_test_split
 
@@ -17,6 +18,8 @@ class DataHandler:
 
         if self.data_info.dataset == 'synthetic':
             self.synthetic_data_gen()
+        elif self.data_info.dataset == 'schools':
+            self.schools_data_gen()
 
     def synthetic_data_gen(self):
         sparsity = int(np.round(0.5 * self.data_info.n_dims))
@@ -54,3 +57,47 @@ class DataHandler:
         self.tr_task_indexes = np.arange(0, self.data_info.n_tr_tasks)
         self.val_task_indexes = np.arange(self.data_info.n_tr_tasks, self.data_info.n_tr_tasks + self.data_info.n_val_tasks)
         self.test_task_indexes = np.arange(self.data_info.n_tr_tasks + self.data_info.n_val_tasks, self.data_info.n_all_tasks)
+
+    def schools_data_gen(self):
+
+        temp = sio.loadmat('schoolData.mat')
+
+        all_features = temp['X'][0]
+        all_labels = temp['Y'][0]
+
+        all_features = [all_features[i].T for i in range(len(all_features))]
+
+        self.data_info.n_dims = all_features[0].shape[1]
+        shuffled_task_indexes = np.random.permutation(self.data_info.n_all_tasks)
+
+        for task_counter, task in enumerate(shuffled_task_indexes):
+            # loading and normalizing the inputs
+            features = all_features[task]
+            features = features / norm(features, axis=1, keepdims=True)
+
+            # loading the labels
+            labels = all_labels[task].ravel()
+
+            n_points = len(labels)
+
+            if task_counter >= self.data_info.n_tr_tasks:
+                # split into training and test
+                tr_indexes, ts_indexes = train_test_split(np.arange(0, n_points), test_size=self.data_info.ts_points_pct)
+                features_tr = features[tr_indexes]
+                labels_tr = labels[tr_indexes]
+
+                features_ts = features[ts_indexes]
+                labels_ts = labels[ts_indexes]
+
+                self.features_tr[task] = features_tr
+                self.features_ts[task] = features_ts
+                self.labels_tr[task] = labels_tr
+                self.labels_ts[task] = labels_ts
+            else:
+                self.features_tr[task] = features
+                self.labels_tr[task] = labels
+
+        # FIXME the random seed at the top of main then actually call the random seed at this point
+        self.tr_task_indexes = shuffled_task_indexes[:self.data_info.n_tr_tasks]
+        self.val_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks:self.data_info.n_tr_tasks + self.data_info.n_val_tasks]
+        self.test_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks + self.data_info.n_val_tasks:self.data_info.n_all_tasks]
