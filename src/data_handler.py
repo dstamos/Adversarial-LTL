@@ -76,7 +76,7 @@ class DataHandler:
             features = features / norm(features, axis=1, keepdims=True)
 
             # loading the labels
-            labels = all_labels[task].ravel()
+            labels = all_labels[task].ravel() / 200
 
             n_points = len(labels)
 
@@ -96,6 +96,36 @@ class DataHandler:
             else:
                 self.features_tr[task] = features
                 self.labels_tr[task] = labels
+
+        # for task_counter, task in enumerate(shuffled_task_indexes):
+        #     import sklearn
+        #     scaler = sklearn.preprocessing.StandardScaler()
+        #     scaler = scaler.fit(self.labels_tr[task_counter].reshape(-1, 1))
+        #     self.labels_tr[task_counter] = scaler.transform(self.labels_tr[task_counter].reshape(-1, 1))
+        #     try:
+        #         scaler = scaler.fit(self.labels_ts[task_counter].reshape(-1, 1))
+        #         self.labels_ts[task_counter] = scaler.transform(self.labels_ts[task_counter].reshape(-1, 1))
+        #     except:
+        #         pass
+        #
+        # max_value = 0
+        # for task_counter, task in enumerate(shuffled_task_indexes):
+        #     labels_max_1 = max(self.labels_tr[task_counter])
+        #     try:
+        #         labels_max_2 = max(self.labels_ts[task_counter])
+        #         print(self.labels_ts[task_counter])
+        #     except:
+        #         labels_max_2 = 0
+        #     if max(labels_max_1, labels_max_2) > max_value:
+        #         max_value = max(labels_max_1, labels_max_2)
+        #
+        #
+        # for task_counter, task in enumerate(shuffled_task_indexes):
+        #     self.labels_tr[task_counter] = self.labels_tr[task_counter] / max_value
+        #     try:
+        #         self.labels_ts[task_counter] = self.labels_ts[task_counter] / max_value
+        #     except:
+        #         k = 1
 
         # FIXME the random seed at the top of main then actually call the random seed at this point
         self.tr_task_indexes = shuffled_task_indexes[:self.data_info.n_tr_tasks]

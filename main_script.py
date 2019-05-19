@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 from src.settings import DataSettings, TrainingSettings
 from src.data_handler import DataHandler
 from src.save import Logger
-from src.training import LearningToLearnD,IndipendentTaskLearning
+from src.training import LearningToLearnD, IndipendentTaskLearning
+from src.multitask_learning import MultitaskLearning
 from copy import deepcopy
 
 
@@ -24,18 +25,23 @@ if __name__ == "__main__":
                       'n_tr_tasks': 50,
                       'n_val_tasks': 50,
                       'n_test_tasks': 39,
-                      'ts_points_pct': 0.5,
+                      'ts_points_pct': 0.25,
                       'seed': 999}
 
-    training_info_dict = {'method': 'temp_method',
-                          'inner_regul_param': [2.511886e-04],  # [10 ** float(i) for i in np.linspace(-4, 0.5, 4)],
-                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-1, 3, 6)],
-                          'convergence_tol': 10 ** -4}
+    # training_info_dict = {'method': 'temp_method',
+    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-4, 0.5, 4)],
+    #                       'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-1, 3, 6)],
+    #                       'convergence_tol': 10 ** -4}
 
     # training_info_dict = {'method': 'indipendent',
-    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 20)],
+    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 1, 30)],
     #                       'meta_algo_regul_param': [np.nan],
     #                       'convergence_tol': 10 ** -4}
+    #
+    training_info_dict = {'method': 'multitask',
+                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 20)],
+                          'meta_algo_regul_param': [np.nan],
+                          'convergence_tol': 10 ** -4}
 
     data_info = DataSettings(data_info_dict)
     training_info = TrainingSettings(training_info_dict)
@@ -55,6 +61,8 @@ if __name__ == "__main__":
                 model = LearningToLearnD(data_info, logger, meta_algo_regul_param=meta_algo_regul_param, inner_regul_param=inner_regul_param, verbose=1)
             elif training_info.method == 'indipendent':
                 model = IndipendentTaskLearning(data_info, logger, meta_algo_regul_param=meta_algo_regul_param, inner_regul_param=inner_regul_param, verbose=1)
+            elif training_info.method == 'multitask':
+                model = MultitaskLearning(data_info, logger, meta_algo_regul_param=meta_algo_regul_param, inner_regul_param=inner_regul_param, verbose=1)
 
             model.fit(data)
 
