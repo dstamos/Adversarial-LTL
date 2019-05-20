@@ -55,7 +55,7 @@ class LearningToLearnD:
             prev_theta = curr_theta
 
             if cvx is False:
-                loss_subgradient_ours, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
+                loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
                                                          representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
             else:
                 features = data.features_tr[task]
@@ -67,17 +67,34 @@ class LearningToLearnD:
                 expr = cp.indicator(constraints)
 
                 objective = cp.Minimize((1/n_points) * np.reshape(labels, [1, n_points])*a + expr +
-                                        (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a))
+                                        (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a)**2)
 
                 prob = cp.Problem(objective)
                 prob.solve()
-                loss_subgradient_cvx = np.array(a.value).ravel()
-
-            print('ours:')
-            print(loss_subgradient_ours)
-            print('cvx:')
-            print(loss_subgradient_cvx)
-
+                loss_subgradient = np.array(a.value).ravel()
+            ###################################################################################################################
+            # loss_subgradient_ours, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
+            #                                          representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
+            # features = data.features_tr[task]
+            # labels = data.labels_tr[task]
+            # n_points = features.shape[0]
+            # a = cp.Variable(n_points)
+            #
+            # constraints = [cp.norm(a, "inf") <= 1]
+            # expr = cp.indicator(constraints)
+            #
+            # objective = cp.Minimize((1/n_points) * np.reshape(labels, [1, n_points])*a + expr +
+            #                         (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a)**2)
+            #
+            # prob = cp.Problem(objective)
+            # prob.solve()
+            # loss_subgradient_cvx = np.array(a.value).ravel()
+            #
+            # print('ours:')
+            # print(loss_subgradient_ours)
+            # print('cvx:')
+            # print(loss_subgradient_cvx)
+            ###################################################################################################################
             # Approximate the gradient
             g = data.features_tr[task].T @ loss_subgradient
             approx_grad = - 1 / (2 * self.inner_regul_param * data.features_tr[task].shape[0] ** 2) * np.outer(g, g)
@@ -334,7 +351,7 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
         def subgradient(label, feature, weight_vector):
             pred = feature @ weight_vector
             subgrad = np.sign(pred - label)
-            return subgrad / total_n_points
+            return subgrad
 
         def update_step(weight_vector, inner_iteration, subgrad, curr_epoch):
             step = 1 / (inner_regul_param * (curr_epoch*total_n_points + inner_iteration + 1 + 1))
