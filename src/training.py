@@ -97,6 +97,16 @@ class LearningToLearnD:
 
     def predict(self, representation_d, features, labels):
         _, weight_vector, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
+        # import cvxpy as cp
+        # x = cp.Variable(features.shape[1])
+        # objective = cp.Minimize(cp.sum(cp.abs(features * x - labels)) +
+        #                         (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+        #
+        # prob = cp.Problem(objective)
+        #
+        # result = prob.solve()
+        # weight_vector = np.array(x.value).ravel()
+
         predictions = features @ weight_vector
         return predictions
 
@@ -285,8 +295,9 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
         def update_step(weight_vector, inner_iteration, subgrad, curr_epoch):
             step = 1 / (inner_regul_param * (curr_epoch*total_n_points + inner_iteration + 1 + 1))
             # TODO Change the pinv based on the computations in the paper
-            full_subgrad = representation_d @ (features[inner_iteration, :] * subgrad +
-                                               inner_regul_param * representation_d_inv @ weight_vector)
+            # full_subgrad = representation_d @ (features[inner_iteration, :] * subgrad +
+            #                                    inner_regul_param * representation_d_inv @ weight_vector)
+            full_subgrad = representation_d @ features[inner_iteration, :] * subgrad + inner_regul_param * weight_vector
             new_weight_vector = weight_vector - step * full_subgrad
             return new_weight_vector
     else:
