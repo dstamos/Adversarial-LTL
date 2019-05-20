@@ -29,8 +29,8 @@ if __name__ == "__main__":
                       'seed': 999}
 
     training_info_dict = {'method': 'temp_method',
-                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-4, 0.5, 4)],
-                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-1, 3, 6)],
+                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-2, 0.5, 4)],
+                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(1, 3, 6)],
                           'convergence_tol': 10 ** -4}
 
     # training_info_dict = {'method': 'indipendent',

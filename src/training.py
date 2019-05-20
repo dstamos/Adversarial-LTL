@@ -41,7 +41,6 @@ class LearningToLearnD:
                 objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
 
                 prob = cp.Problem(objective)
-
                 prob.solve()
                 weight_vector_ts = np.array(x.value).ravel()
 
@@ -55,7 +54,29 @@ class LearningToLearnD:
         for task_idx, task in enumerate(data.tr_task_indexes):
             prev_theta = curr_theta
 
-            loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
+            if cvx is False:
+                loss_subgradient_ours, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
+                                                         representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
+            else:
+                features = data.features_tr[task]
+                labels = data.labels_tr[task]
+                n_points = features.shape[0]
+                a = cp.Variable(n_points)
+
+                constraints = [cp.norm(a, "inf") <= 1]
+                expr = cp.indicator(constraints)
+
+                objective = cp.Minimize((1/n_points) * np.reshape(labels, [1, n_points])*a + expr +
+                                        (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a))
+
+                prob = cp.Problem(objective)
+                prob.solve()
+                loss_subgradient_cvx = np.array(a.value).ravel()
+
+            print('ours:')
+            print(loss_subgradient_ours)
+            print('cvx:')
+            print(loss_subgradient_cvx)
 
             # Approximate the gradient
             g = data.features_tr[task].T @ loss_subgradient
