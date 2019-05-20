@@ -28,20 +28,20 @@ if __name__ == "__main__":
                       'ts_points_pct': 0.25,
                       'seed': 999}
 
-    # training_info_dict = {'method': 'temp_method',
-    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-4, 0.5, 4)],
-    #                       'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-1, 3, 6)],
-    #                       'convergence_tol': 10 ** -4}
+    training_info_dict = {'method': 'temp_method',
+                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-4, 0.5, 4)],
+                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-1, 3, 6)],
+                          'convergence_tol': 10 ** -4}
 
     # training_info_dict = {'method': 'indipendent',
-    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 1, 30)],
+    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-8, 1, 30)],
     #                       'meta_algo_regul_param': [np.nan],
     #                       'convergence_tol': 10 ** -4}
     #
-    training_info_dict = {'method': 'multitask',
-                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 20)],
-                          'meta_algo_regul_param': [np.nan],
-                          'convergence_tol': 10 ** -4}
+    # training_info_dict = {'method': 'multitask',
+    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 20)],
+    #                       'meta_algo_regul_param': [np.nan],
+    #                       'convergence_tol': 10 ** -4}
 
     data_info = DataSettings(data_info_dict)
     training_info = TrainingSettings(training_info_dict)

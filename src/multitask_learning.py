@@ -39,11 +39,10 @@ class MultitaskLearning:
         printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % {'task': -1, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
         self.logger.log_event(printout)
 
-    @staticmethod
-    def solve_wrt_w(repr_d, features, labels, weights_matrix, task_range):
+    def solve_wrt_w(self, repr_d, features, labels, weights_matrix, task_range):
         for _, task_idx in enumerate(task_range):
             n_points = len(labels[task_idx])
-            curr_w_pred = (repr_d @ features[task_idx].T @ np.linalg.solve(features[task_idx] @ repr_d @ features[task_idx].T + n_points * np.eye(n_points), labels[task_idx])).ravel()
+            curr_w_pred = (repr_d @ features[task_idx].T @ np.linalg.solve(features[task_idx] @ repr_d @ features[task_idx].T + n_points * self.inner_regul_param * np.eye(n_points), labels[task_idx])).ravel()
             weights_matrix[:, task_idx] = curr_w_pred
         return weights_matrix
 
