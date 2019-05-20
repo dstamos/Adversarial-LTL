@@ -23,7 +23,7 @@ class LearningToLearnD:
         print('LTL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = self.data_info.n_dims
 
-        cvx = True   # True, False
+        cvx = False   # True, False
 
         curr_theta = np.zeros((n_dims, n_dims))
         curr_representation_d = np.eye(n_dims) / n_dims
@@ -45,7 +45,7 @@ class LearningToLearnD:
                 prob.solve()
                 weight_vector_ts = np.array(x.value).ravel()
 
-                predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
+            predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
         test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
 
         tt = time.time()
@@ -57,7 +57,7 @@ class LearningToLearnD:
 
             if cvx is False:
                 loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
-                                                         representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
+                                                    representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
             else:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
@@ -373,7 +373,7 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
 
     curr_epoch_obj = 10**10
     big_fucking_counter = 0
-    for epoch in range(50):
+    for epoch in range(100):
         prev_epoch_obj = curr_epoch_obj
         subgradient_vector = np.zeros(total_n_points)
         # TODO Shuffle points if we do multiple epochs?

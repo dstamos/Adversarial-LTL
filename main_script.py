@@ -33,6 +33,9 @@ if __name__ == "__main__":
                           'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-5, 3, 10)],
                           'convergence_tol': 10 ** -4}
 
+    training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][4]]
+    training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][3]]
+
     # training_info_dict = {'method': 'indipendent',
     #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-8, 1, 30)],
     #                       'meta_algo_regul_param': [np.nan],
