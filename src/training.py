@@ -1,5 +1,6 @@
 import numpy as np
 import scipy as sp
+import cvxpy as cp
 import time
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, explained_variance_score, mean_squared_error
@@ -21,13 +22,30 @@ class LearningToLearnD:
         print('LTL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = self.data_info.n_dims
 
+        cvx = True   # True, False
+
         curr_theta = np.zeros((n_dims, n_dims))
-        representation_d = np.eye(n_dims) / n_dims
+        curr_representation_d = np.eye(n_dims) / n_dims
+        representation_d = curr_representation_d
 
         test_scores = []
         predictions_ts = []
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
-            predictions_ts.append(self.predict(representation_d, data.features_ts[test_task], data.labels_ts[test_task]))
+            features = data.features_tr[test_task]
+            labels = data.labels_tr[test_task]
+
+            if cvx is False:
+                _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
+            else:
+                x = cp.Variable(features.shape[1])
+                objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+
+                prob = cp.Problem(objective)
+
+                prob.solve()
+                weight_vector_ts = np.array(x.value).ravel()
+
+            predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
         test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
 
         tt = time.time()
@@ -70,9 +88,24 @@ class LearningToLearnD:
 
             self.representation_d = representation_d
 
+            test_scores = []
             predictions_ts = []
             for test_task_idx, test_task in enumerate(data.test_task_indexes):
-                predictions_ts.append(self.predict(representation_d, data.features_ts[test_task], data.labels_ts[test_task]))
+                features = data.features_tr[test_task]
+                labels = data.labels_tr[test_task]
+
+                if cvx is False:
+                    _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
+                else:
+                    x = cp.Variable(features.shape[1])
+                    objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+
+                    prob = cp.Problem(objective)
+
+                    prob.solve()
+                    weight_vector_ts = np.array(x.value).ravel()
+
+                predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
             test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
 
             printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
@@ -87,26 +120,16 @@ class LearningToLearnD:
         plt.savefig('schools-inner_' + str(self.inner_regul_param) + '-outer_' + str(self.meta_algo_regul_param) + '.png')
 
         # TODO Optimization wrt w on val tasks, training points
-        val_scores = []
-        for val_task_idx, val_task in enumerate(data.val_task_indexes):
-            predictions_val = self.predict(representation_d, data.features_ts[val_task], data.labels_ts[val_task])
-            val_scores.append(mtl_mae_scorer([predictions_val], [data.labels_ts[val_task]]))
+        # val_scores = []
+        # for val_task_idx, val_task in enumerate(data.val_task_indexes):
+        #     predictions_val = self.predict(representation_d, data.features_ts[val_task], data.labels_ts[val_task])
+        #     val_scores.append(mtl_mae_scorer([predictions_val], [data.labels_ts[val_task]]))
 
-        self.results['val_score'] = np.average(val_scores)
+        self.results['val_score'] = 0   # np.average(val_scores)
         self.results['test_scores'] = test_scores
 
-    def predict(self, representation_d, features, labels):
-        _, weight_vector, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
-        # import cvxpy as cp
-        # x = cp.Variable(features.shape[1])
-        # objective = cp.Minimize(cp.sum(cp.abs(features * x - labels)) +
-        #                         (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
-        #
-        # prob = cp.Problem(objective)
-        #
-        # result = prob.solve()
-        # weight_vector = np.array(x.value).ravel()
-
+    @staticmethod
+    def predict(weight_vector, features):
         predictions = features @ weight_vector
         return predictions
 
@@ -310,7 +333,7 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
 
     curr_epoch_obj = 10**10
     big_fucking_counter = 0
-    for epoch in range(1000):
+    for epoch in range(50):
         prev_epoch_obj = curr_epoch_obj
         subgradient_vector = np.zeros(total_n_points)
         # TODO Shuffle points if we do multiple epochs?
