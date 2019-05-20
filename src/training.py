@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
 import cvxpy as cp
+import warnings
 import time
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, explained_variance_score, mean_squared_error
@@ -44,7 +45,7 @@ class LearningToLearnD:
                 prob.solve()
                 weight_vector_ts = np.array(x.value).ravel()
 
-            predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
+                predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
         test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
 
         tt = time.time()
@@ -58,20 +59,22 @@ class LearningToLearnD:
                 loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
                                                          representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
             else:
-                features = data.features_tr[task]
-                labels = data.labels_tr[task]
-                n_points = features.shape[0]
-                a = cp.Variable(n_points)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    features = data.features_tr[task]
+                    labels = data.labels_tr[task]
+                    n_points = features.shape[0]
+                    a = cp.Variable(n_points)
 
-                constraints = [cp.norm(a, "inf") <= 1]
-                expr = cp.indicator(constraints)
+                    constraints = [cp.norm(a, "inf") <= 1]
+                    expr = cp.indicator(constraints)
 
-                objective = cp.Minimize((1/n_points) * np.reshape(labels, [1, n_points])*a + expr +
-                                        (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a)**2)
+                    objective = cp.Minimize((1/n_points) * np.reshape(labels, [1, n_points])*a + expr +
+                                            (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a)**2)
 
-                prob = cp.Problem(objective)
-                prob.solve()
-                loss_subgradient = np.array(a.value).ravel()
+                    prob = cp.Problem(objective)
+                    prob.solve()
+                    loss_subgradient = np.array(a.value).ravel()
             ###################################################################################################################
             # loss_subgradient_ours, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
             #                                          representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
@@ -126,7 +129,6 @@ class LearningToLearnD:
 
             self.representation_d = representation_d
 
-            test_scores = []
             predictions_ts = []
             for test_task_idx, test_task in enumerate(data.test_task_indexes):
                 features = data.features_tr[test_task]
