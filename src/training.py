@@ -23,7 +23,7 @@ class LearningToLearnD:
         print('LTL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = self.data_info.n_dims
 
-        cvx = False   # True, False
+        cvx = True   # True, False
 
         curr_theta = np.zeros((n_dims, n_dims))
         curr_representation_d = np.eye(n_dims) / n_dims
@@ -357,9 +357,7 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
 
         def update_step(weight_vector, inner_iteration, subgrad, curr_epoch):
             step = 1 / (inner_regul_param * (curr_epoch*total_n_points + inner_iteration + 1 + 1))
-            # TODO Change the pinv based on the computations in the paper
-            # full_subgrad = representation_d @ (features[inner_iteration, :] * subgrad +
-            #                                    inner_regul_param * representation_d_inv @ weight_vector)
+            # full_subgrad = representation_d @ (features[inner_iteration, :] * subgrad + inner_regul_param * representation_d_inv @ weight_vector)
             full_subgrad = representation_d @ features[inner_iteration, :] * subgrad + inner_regul_param * weight_vector
             new_weight_vector = weight_vector - step * full_subgrad
             return new_weight_vector
@@ -373,16 +371,17 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
 
     curr_epoch_obj = 10**10
     big_fucking_counter = 0
-    for epoch in range(100):
+    for epoch in range(1000):
         prev_epoch_obj = curr_epoch_obj
         subgradient_vector = np.zeros(total_n_points)
         # TODO Shuffle points if we do multiple epochs?
-        for curr_point_idx in range(features.shape[0]):
+        shuffled_points = np.random.permutation(range(features.shape[0]))
+        for curr_point_idx, curr_point in enumerate(shuffled_points):
             big_fucking_counter = big_fucking_counter + 1
             prev_weight_vector = curr_weight_vector
 
             # Compute subgradient
-            u = subgradient(labels[curr_point_idx], features[curr_point_idx], prev_weight_vector)
+            u = subgradient(labels[curr_point], features[curr_point], prev_weight_vector)
             subgradient_vector[curr_point_idx] = u
 
             # Update
