@@ -23,7 +23,7 @@ class LearningToLearnD:
         print('LTL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = self.data_info.n_dims
 
-        cvx = False   # True, False
+        cvx = True   # True, False
 
         curr_theta = np.zeros((n_dims, n_dims))
         curr_representation_d = np.eye(n_dims) / n_dims
@@ -381,12 +381,13 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
             # Update
             step = 1 / (inner_regul_param * (epoch * total_n_points + curr_point_idx + 1 + 1))
             full_subgrad = representation_d @ features[curr_point_idx, :] * u + inner_regul_param * prev_weight_vector
+            # full_subgrad = features[curr_point_idx, :] * u + inner_regul_param * representation_d_inv * prev_weight_vector
             curr_weight_vector = prev_weight_vector - step * full_subgrad
 
             moving_average_weights = (moving_average_weights * (big_fucking_counter + 1) + curr_weight_vector * 1) / (big_fucking_counter + 2)
 
             obj.append(absolute_loss(features, labels, curr_weight_vector) + penalty(curr_weight_vector))
-
+        print('epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
         curr_epoch_obj = obj[-1]
         conv = np.abs(curr_epoch_obj - prev_epoch_obj) / prev_epoch_obj
         if conv < 1e-10:
