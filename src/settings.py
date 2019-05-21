@@ -12,7 +12,7 @@ class DataSettings:
 
         self.ts_points_pct = data_dict['ts_points_pct']
 
-        if self.dataset == 'synthetic':
+        if self.dataset == 'synthetic' or self.dataset == 'synthetic_data_gen_biased_sgd_paper':
             self.n_all_points = data_dict['n_all_points']
             self.n_dims = data_dict['n_dims']
             self.noise_std = data_dict['noise_std']

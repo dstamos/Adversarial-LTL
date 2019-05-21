@@ -187,7 +187,8 @@ def mtl_mae_scorer(predictions, true_labels):
 
     metric = 0
     for task_idx in range(n_tasks):
-        c_metric = 100 * explained_variance_score(true_labels[task_idx], predictions[task_idx])
+        # c_metric = 100 * explained_variance_score(true_labels[task_idx], predictions[task_idx])
+        c_metric = mean_absolute_error(true_labels[task_idx], predictions[task_idx])
 
         # n_points = len(true_labels[task_idx])
         # mse = np.linalg.norm(true_labels[task_idx] - predictions[task_idx])**2 / n_points
@@ -401,7 +402,7 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
             moving_average_weights = (moving_average_weights * (big_fucking_counter + 1) + curr_weight_vector * 1) / (big_fucking_counter + 2)
 
             obj.append(absolute_loss(features, labels, curr_weight_vector) + penalty(curr_weight_vector))
-        print('epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
+        # print('epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
         curr_epoch_obj = obj[-1]
         conv = np.abs(curr_epoch_obj - prev_epoch_obj) / prev_epoch_obj
         if conv < 1e-10:

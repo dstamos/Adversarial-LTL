@@ -21,6 +21,16 @@ if __name__ == "__main__":
     #                   'noise_std': 0.1,
     #                   'seed': 999}
 
+    # data_info_dict = {'dataset': 'synthetic_data_gen_biased_sgd_paper',
+    #                   'n_tr_tasks': 200,
+    #                   'n_val_tasks': 2,
+    #                   'n_test_tasks': 20,
+    #                   'n_all_points': 20,
+    #                   'ts_points_pct': 0.5,
+    #                   'n_dims': 30,
+    #                   'noise_std': 0.1,
+    #                   'seed': 999}
+
     data_info_dict = {'dataset': 'schools',
                       'n_tr_tasks': 50,
                       'n_val_tasks': 50,
@@ -32,7 +42,6 @@ if __name__ == "__main__":
                           'inner_regul_param': [10 ** float(i) for i in np.linspace(-5, 2, 10)],
                           'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-5, 3, 10)],
                           'convergence_tol': 10 ** -4}
-
     training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][4]]
     training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][3]]
 
@@ -40,7 +49,7 @@ if __name__ == "__main__":
     #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-8, 1, 30)],
     #                       'meta_algo_regul_param': [np.nan],
     #                       'convergence_tol': 10 ** -4}
-    #
+
     # training_info_dict = {'method': 'multitask',
     #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 20)],
     #                       'meta_algo_regul_param': [np.nan],

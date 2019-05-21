@@ -18,6 +18,8 @@ class DataHandler:
 
         if self.data_info.dataset == 'synthetic':
             self.synthetic_data_gen()
+        elif self.data_info.dataset == 'synthetic_data_gen_biased_sgd_paper':
+            self.synthetic_data_gen_biased_sgd_paper()
         elif self.data_info.dataset == 'schools':
             self.schools_data_gen()
 
@@ -38,6 +40,42 @@ class DataHandler:
             # generating labels and adding noise
             clean_labels = features @ weight_vector
             noisy_labels = clean_labels + self.data_info.noise_std * np.random.randn(self.data_info.n_all_points)
+
+            # split into training and test
+            tr_indexes, ts_indexes = train_test_split(np.arange(0, self.data_info.n_all_points), test_size=self.data_info.ts_points_pct)
+            features_tr = features[tr_indexes]
+            labels_tr = noisy_labels[tr_indexes]
+
+            features_ts = features[ts_indexes]
+            # labels_ts = clean_labels[ts_indexes]
+            labels_ts = noisy_labels[ts_indexes]
+
+            self.features_tr[task_idx] = features_tr
+            self.features_ts[task_idx] = features_ts
+            self.labels_tr[task_idx] = labels_tr
+            self.labels_ts[task_idx] = labels_ts
+
+        # FIXME the random seed at the top of main then actually call the random seed at this point
+        self.tr_task_indexes = np.arange(0, self.data_info.n_tr_tasks)
+        self.val_task_indexes = np.arange(self.data_info.n_tr_tasks, self.data_info.n_tr_tasks + self.data_info.n_val_tasks)
+        self.test_task_indexes = np.arange(self.data_info.n_tr_tasks + self.data_info.n_val_tasks, self.data_info.n_all_tasks)
+
+    def synthetic_data_gen_biased_sgd_paper(self):
+        for task_idx in range(self.data_info.n_all_tasks):
+            # generating and normalizing the inputs
+            features = np.random.randn(self.data_info.n_all_points, self.data_info.n_dims)
+            features = features / norm(features, axis=1, keepdims=True)
+
+            # generating and normalizing the weight vectors
+            weight_vector = np.random.normal(loc=4*np.ones(self.data_info.n_dims), scale=1).ravel()
+
+            # generating labels and adding noise
+            clean_labels = features @ weight_vector
+
+            signal_to_noise_ratio = 10
+            standard_noise = np.random.randn(self.data_info.n_all_points)
+            noise_std = np.sqrt(np.var(clean_labels) / (signal_to_noise_ratio * np.var(standard_noise)))
+            noisy_labels = clean_labels + noise_std * standard_noise
 
             # split into training and test
             tr_indexes, ts_indexes = train_test_split(np.arange(0, self.data_info.n_all_points), test_size=self.data_info.ts_points_pct)
