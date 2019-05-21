@@ -281,7 +281,21 @@ class IndipendentTaskLearning:
                 penalty_output = self.inner_regul_param / 2 * vectorsss @ representation_d_inv @ vectorsss
                 return penalty_output
 
-            _, weight_vector, last_obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, data.features_tr[test_task], data.labels_tr[test_task])
+            # _, weight_vector, last_obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, data.features_tr[test_task], data.labels_tr[test_task])
+            cvx = False
+            features = data.features_tr[test_task]
+            labels = data.labels_tr[test_task]
+
+            if cvx is False:
+                _, weight_vector, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
+            else:
+                x = cp.Variable(features.shape[1])
+                objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+
+                prob = cp.Problem(objective)
+
+                prob.solve()
+                weight_vector = np.array(x.value).ravel()
 
             # obj_ours = absolute_loss(data.features_tr[test_task], data.labels_tr[test_task], weight_vector) + penalty(weight_vector)
             #
