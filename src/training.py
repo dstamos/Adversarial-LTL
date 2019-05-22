@@ -46,7 +46,7 @@ class LearningToLearnD:
                 weight_vector_ts = np.array(x.value).ravel()
 
             predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
-        test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
+        test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
 
         tt = time.time()
         printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
@@ -55,6 +55,7 @@ class LearningToLearnD:
         for task_idx, task in enumerate(data.tr_task_indexes):
             prev_theta = curr_theta
 
+            # TODO Try both curr_representation_d and representation_d
             if cvx is False:
                 loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
                                                     curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
@@ -152,7 +153,7 @@ class LearningToLearnD:
                     weight_vector_ts = np.array(x.value).ravel()
 
                 predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
-            test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
+            test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
             printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
                        {'task': task, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
 
@@ -192,14 +193,17 @@ class LearningToLearnD:
         return self
 
 
-def mtl_mae_scorer(predictions, true_labels):
+def mtl_mae_scorer(predictions, true_labels, dataset=None):
     n_tasks = len(true_labels)
 
     metric = 0
     for task_idx in range(n_tasks):
         # c_metric = 100 * explained_variance_score(true_labels[task_idx], predictions[task_idx])
-        c_metric = mean_absolute_error(true_labels[task_idx], predictions[task_idx])
-
+        if dataset == 'movielens100k':
+            non_zero_idx = np.nonzero(true_labels[task_idx])[0]
+            c_metric = mean_absolute_error(true_labels[task_idx][non_zero_idx], predictions[task_idx][non_zero_idx])
+        else:
+            c_metric = mean_absolute_error(true_labels[task_idx], predictions[task_idx])
         # n_points = len(true_labels[task_idx])
         # mse = np.linalg.norm(true_labels[task_idx] - predictions[task_idx])**2 / n_points
         # c_metric = (1 - mse/np.var(true_labels[task_idx]))
@@ -301,11 +305,16 @@ class IndipendentTaskLearning:
                 _, weight_vector, obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
             else:
                 x = cp.Variable(features.shape[1])
-                objective = cp.Minimize((1 / features.shape[0]) * cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.power(cp.norm(x), 2))
+                if sp.sparse.issparse(features) is False:
+                    objective = cp.Minimize((1 / features.shape[0]) * cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.power(cp.norm(x), 2))
+                else:
+                    objective = cp.Minimize((1 / features.shape[0]) * cp.sum_entries(cp.abs(features.toarray() * x - labels)) + (self.inner_regul_param / 2) * cp.power(cp.norm(x), 2))
 
                 prob = cp.Problem(objective)
-
-                prob.solve()
+                try:
+                    prob.solve()
+                except:
+                    prob.solve(solver='SCS')
                 weight_vector = np.array(x.value).ravel()
 
             # obj_cvx = absolute_loss(features, labels, weight_vector_cvx) + penalty(weight_vector_cvx)
@@ -334,10 +343,9 @@ class IndipendentTaskLearning:
             #
             # print('ours: %f' % obj_ours)
             # print('cvx: %f' % obj_cvx)
-
             predictions = self.predict(data.features_ts[test_task], weight_vector)
             predictions_ts.append(predictions)
-        test_scores = mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes])
+        test_scores = mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset)
 
         printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % \
                    {'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
@@ -369,12 +377,20 @@ class IndipendentTaskLearning:
 def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, inner_algo_method='algo_w', train_plot=0):
 
     representation_d_inv = np.linalg.pinv(representation_d)
+    # if sp.sparse.issparse(features) is False:
+    #     total_n_points = features.shape[0]
+    # else:
+    #     total_n_points = len(np.nonzero(labels)[0])
+
     total_n_points = features.shape[0]
 
     if inner_algo_method == 'algo_w':
         def absolute_loss(curr_features, curr_labels, weight_vector):
             loss = np.linalg.norm(curr_labels - curr_features @ weight_vector, ord=1)
-            loss = loss / total_n_points
+            if sp.sparse.issparse(features) is False:
+                loss = loss / total_n_points
+            else:
+                loss = loss / len(np.nonzero(labels)[0])
             return loss
 
         def penalty(weight_vector):
@@ -398,7 +414,11 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
     for epoch in range(1):
         prev_epoch_obj = curr_epoch_obj
         subgradient_vector = np.zeros(total_n_points)
-        shuffled_points = np.random.permutation(range(features.shape[0]))
+        if sp.sparse.issparse(features) is False:
+            shuffled_points = np.random.permutation(range(features.shape[0]))
+        else:
+            shuffled_points = np.random.permutation(np.nonzero(labels)[0])
+
         for curr_point_idx, curr_point in enumerate(shuffled_points):
             big_fucking_counter = big_fucking_counter + 1
             prev_weight_vector = curr_weight_vector
@@ -408,14 +428,18 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
             subgradient_vector[curr_point] = u
 
             # Update
-            step = 1 / (inner_regul_param * (epoch * total_n_points + curr_point_idx + 1 + 1))
-            full_subgrad = representation_d @ features[curr_point, :] * u + inner_regul_param * prev_weight_vector
-            # full_subgrad = features[curr_point_idx, :] * u + inner_regul_param * representation_d_inv * prev_weight_vector
+            step = 1 / (inner_regul_param * (epoch * len(shuffled_points) + curr_point_idx + 1 + 1))
+            if sp.sparse.issparse(features) is False:
+                full_subgrad = representation_d @ features[curr_point, :] * u + inner_regul_param * prev_weight_vector
+            else:
+                full_subgrad = representation_d @ features[curr_point, :].toarray().ravel() * u + inner_regul_param * prev_weight_vector
             curr_weight_vector = prev_weight_vector - step * full_subgrad
 
             moving_average_weights = (moving_average_weights * (big_fucking_counter + 1) + curr_weight_vector * 1) / (big_fucking_counter + 2)
 
-            obj.append(absolute_loss(features, labels, curr_weight_vector) + penalty(curr_weight_vector))
+            curr_obj = absolute_loss(features, labels, curr_weight_vector) + penalty(curr_weight_vector)
+            obj.append(curr_obj)
+            print('iter %5d | %10.5f' % (curr_point_idx, curr_obj))
         # print('epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
         curr_epoch_obj = obj[-1]
         conv = np.abs(curr_epoch_obj - prev_epoch_obj) / prev_epoch_obj
