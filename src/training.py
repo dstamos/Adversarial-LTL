@@ -235,7 +235,7 @@ class IndipendentTaskLearning:
         predictions_ts = []
 
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
-            cvx = False  # True, False
+            cvx = True  # True, False
             features = data.features_tr[test_task]
             labels = data.labels_tr[test_task]
 
@@ -420,7 +420,7 @@ def inner_algo_pure(n_dims, inner_regul_param, representation_d, features, label
 
 
 def convex_solver_primal(features, labels, regul_param, representation_d):
-    fista_method = False
+    fista_method = False  # True, False
 
     if fista_method is False:
         import cvxpy as cp
@@ -436,7 +436,7 @@ def convex_solver_primal(features, labels, regul_param, representation_d):
         weight_vector = np.array(x.value).ravel()
     else:
         weight_vector = None
-        pass
+        primal_weight_vector, _ = fista(features, labels, regul_param, representation_d)
 
     return weight_vector
 
@@ -474,15 +474,20 @@ def fista(features, labels, regul_param, representation_d):
     else:
         n_points = len(np.nonzero(labels)[0])
 
-    largest_eigenval = eigsh(features @ features.T, k=1, which='LM')
-    lipschitz_constant = (regul_param * n_points) / (np.linalg.norm(representation_d, ord="inf") * largest_eigenval)
+    largest_eigenval = eigsh(features @ features.T, k=1, which='LM')[0][0]
+    lipschitz_constant = (regul_param * n_points) / (np.linalg.norm(representation_d, ord=2) * largest_eigenval)
 
     def penalty(xx):
-        return 1 / (2 * regul_param * n_points) * np.linalg.norm(sp.linalg.sqrtm(representation_d) @ features.T @ xx, ord='fro')**2
+        return 1 / (2 * regul_param * n_points) * np.linalg.norm(sp.linalg.sqrtm(representation_d) @ features.T @ xx)**2
 
     def prox(xx):
-        # TODO Implement the prox
-        return np.sign(xx) * np.maximum(abs(xx) - regul_param / lipschitz_constant, 0)
+        prox_diff = xx - labels
+
+        thresh = regul_param / lipschitz_constant
+        prox_point = np.copy(labels)
+        prox_point[prox_diff < - thresh] = (xx + thresh)[prox_diff < - thresh]
+        prox_point[prox_diff > thresh] = (xx - thresh)[prox_diff > thresh]
+        return prox_point
 
     def loss(xx):
         return 1 / n_points * labels @ xx
@@ -492,6 +497,7 @@ def fista(features, labels, regul_param, representation_d):
 
     pee = np.random.randn(n_points)
     alpha = np.random.randn(n_points)
+    primal_weight_vector = None
 
     curr_iter = 0
     curr_cost = loss(alpha) + penalty(alpha)
@@ -508,6 +514,8 @@ def fista(features, labels, regul_param, representation_d):
         search_point = alpha - step_size * grad(alpha)
         pee = prox(search_point)
 
+        primal_weight_vector = - 1 / (n_points * regul_param) * representation_d @ features.T @ pee
+
         theta = (np.sqrt(theta ** 4 + 4 * theta ** 2) - theta ** 2) / 2
         rho = 1 - theta + np.sqrt(1 - theta)
         alpha = rho * pee - (rho - 1) * prev_pee
@@ -523,4 +531,4 @@ def fista(features, labels, regul_param, representation_d):
         if time.time() - t > 0:
             t = time.time()
             print('iter: %6d | cost: %20.8f ~ tol: %18.15f | step: %12.10f' % (curr_iter, curr_cost, diff, step_size))
-    return alpha
+    return primal_weight_vector, alpha
