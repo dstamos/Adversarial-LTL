@@ -12,13 +12,13 @@ if __name__ == "__main__":
     np.random.seed(999)
 
     # data_info_dict = {'dataset': 'synthetic',
-    #                   'n_tr_tasks': 200,
+    #                   'n_tr_tasks': 3000,
     #                   'n_val_tasks': 2,
     #                   'n_test_tasks': 20,
-    #                   'n_all_points': 40,
+    #                   'n_all_points': 80,
     #                   'ts_points_pct': 0.5,
-    #                   'n_dims': 50,
-    #                   'noise_std': 0.1,
+    #                   'n_dims': 20,
+    #                   'noise_std': 0.2,
     #                   'seed': 999}
 
     # data_info_dict = {'dataset': 'synthetic_data_gen_biased_sgd_paper',
@@ -31,24 +31,36 @@ if __name__ == "__main__":
     #                   'noise_std': 0.1,
     #                   'seed': 999}
 
-    data_info_dict = {'dataset': 'schools',
-                      'n_tr_tasks': 50,
-                      'n_val_tasks': 50,
-                      'n_test_tasks': 39,
+    # data_info_dict = {'dataset': 'schools',
+    #                   'n_tr_tasks': 50,
+    #                   'n_val_tasks': 50,
+    #                   'n_test_tasks': 39,
+    #                   'ts_points_pct': 0.25,
+    #                   'seed': 999}
+
+    data_info_dict = {'dataset': 'movielens100k',
+                      'n_tr_tasks': 400,
+                      'n_val_tasks': 20,
+                      'n_test_tasks': 343,
                       'ts_points_pct': 0.25,
                       'seed': 999}
 
     training_info_dict = {'method': 'temp_method',
-                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-5, 2, 10)],
-                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-5, 3, 10)],
+                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 10)],
+                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-4, 3, 10)],
                           'convergence_tol': 10 ** -4}
-    training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][4]]
-    training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][3]]
+    # training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][6]]
+    # training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][4]]
 
     # training_info_dict = {'method': 'indipendent',
-    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-8, 1, 30)],
+    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-8, 4, 30)],
     #                       'meta_algo_regul_param': [np.nan],
     #                       'convergence_tol': 10 ** -4}
+    # training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][3]]
+    # training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][5]]
+
+    training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][5]]
+    training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][4]]
 
     # training_info_dict = {'method': 'multitask',
     #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 20)],
@@ -88,8 +100,8 @@ if __name__ == "__main__":
     plt.title('val errors')
     plt.pause(0.1)
 
-    plt.show()
-    k = 1
+    # plt.show()
+    # k = 1
 
     # model = ModelSelection(data, training_info)
     # model.fit(data.features_tr, data.labels_tr)

@@ -20,10 +20,10 @@ class LearningToLearnD:
         self.representation_d = None
 
     def fit(self, data):
-        print('LTL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
+        print('LTL | optimizing for inner param: %12f and outer param: %12f' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = self.data_info.n_dims
 
-        cvx = True   # True, False
+        cvx = False   # True, False
 
         curr_theta = np.zeros((n_dims, n_dims))
         curr_representation_d = np.eye(n_dims) / n_dims
@@ -57,7 +57,7 @@ class LearningToLearnD:
 
             if cvx is False:
                 loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
-                                                    representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
+                                                    curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
             else:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
@@ -70,11 +70,16 @@ class LearningToLearnD:
                     expr = cp.indicator(constraints)
 
                     objective = cp.Minimize((1/n_points) * np.reshape(labels, [1, n_points])*a + expr +
-                                            (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a)**2)
+                                            (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(curr_representation_d) @ features.T * a)**2)
 
                     prob = cp.Problem(objective)
-                    prob.solve()
-                    loss_subgradient = np.array(a.value).ravel()
+                    try:
+                        prob.solve()
+                        loss_subgradient = np.array(a.value).ravel()
+                    except:
+                        print('FAILED FAILED FAILED FAILED FAILED FAILED FAILED FAILED FAILED FAILED FAILED ')
+                        loss_subgradient = np.zeros(data.features_tr[task].shape[0])
+
             ###################################################################################################################
             # loss_subgradient_ours, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
             #                                          representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
@@ -138,7 +143,8 @@ class LearningToLearnD:
                     _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
                 else:
                     x = cp.Variable(features.shape[1])
-                    objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+                    objective = cp.Minimize((1 / features.shape[0]) * cp.sum_entries(cp.abs(features * x - labels)) +
+                                            (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
 
                     prob = cp.Problem(objective)
 
@@ -147,10 +153,14 @@ class LearningToLearnD:
 
                 predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
             test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes]))
-
             printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
                        {'task': task, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
+
+            if float(np.mean(test_scores)) < -0.2:
+                print('breaking')
+                break
             self.logger.log_event(printout)
+        print(test_scores)
         plt.figure(777)
         plt.clf()
         plt.plot(test_scores)
@@ -263,7 +273,7 @@ class IndipendentTaskLearning:
         print('ITL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = data.data_info.n_dims
 
-        representation_d = np.eye(n_dims) / n_dims
+        representation_d = np.eye(n_dims)
 
         tt = time.time()
         self.representation_d = representation_d
@@ -283,20 +293,26 @@ class IndipendentTaskLearning:
                 return penalty_output
 
             # _, weight_vector, last_obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, data.features_tr[test_task], data.labels_tr[test_task])
-            cvx = False
+            cvx = False  # True, False
             features = data.features_tr[test_task]
             labels = data.labels_tr[test_task]
 
             if cvx is False:
-                _, weight_vector, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
+                _, weight_vector, obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
             else:
                 x = cp.Variable(features.shape[1])
-                objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+                objective = cp.Minimize((1 / features.shape[0]) * cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.power(cp.norm(x), 2))
 
                 prob = cp.Problem(objective)
 
                 prob.solve()
                 weight_vector = np.array(x.value).ravel()
+
+            # obj_cvx = absolute_loss(features, labels, weight_vector_cvx) + penalty(weight_vector_cvx)
+            # plt.axhline(obj_cvx, xmin=0, xmax=len(obj))
+            # plt.plot(obj, 'g')
+            # plt.pause(0.1)
+
 
             # obj_ours = absolute_loss(data.features_tr[test_task], data.labels_tr[test_task], weight_vector) + penalty(weight_vector)
             #
@@ -369,7 +385,6 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
             pred = feature @ weight_vector
             subgrad = np.sign(pred - label)
             return subgrad
-
     else:
         raise ValueError("Unknown inner algorithm.")
 
@@ -380,10 +395,9 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
 
     curr_epoch_obj = 10**10
     big_fucking_counter = 0
-    for epoch in range(1000):
+    for epoch in range(1):
         prev_epoch_obj = curr_epoch_obj
         subgradient_vector = np.zeros(total_n_points)
-        # TODO Shuffle points if we do multiple epochs?
         shuffled_points = np.random.permutation(range(features.shape[0]))
         for curr_point_idx, curr_point in enumerate(shuffled_points):
             big_fucking_counter = big_fucking_counter + 1
@@ -391,11 +405,11 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
 
             # Compute subgradient
             u = subgradient(labels[curr_point], features[curr_point], prev_weight_vector)
-            subgradient_vector[curr_point_idx] = u
+            subgradient_vector[curr_point] = u
 
             # Update
             step = 1 / (inner_regul_param * (epoch * total_n_points + curr_point_idx + 1 + 1))
-            full_subgrad = representation_d @ features[curr_point_idx, :] * u + inner_regul_param * prev_weight_vector
+            full_subgrad = representation_d @ features[curr_point, :] * u + inner_regul_param * prev_weight_vector
             # full_subgrad = features[curr_point_idx, :] * u + inner_regul_param * representation_d_inv * prev_weight_vector
             curr_weight_vector = prev_weight_vector - step * full_subgrad
 
@@ -405,7 +419,8 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
         # print('epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
         curr_epoch_obj = obj[-1]
         conv = np.abs(curr_epoch_obj - prev_epoch_obj) / prev_epoch_obj
-        if conv < 1e-10:
+        if conv < 1e-8:
+            # print('BREAKING epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
             break
 
     if train_plot == 1:
@@ -414,5 +429,70 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
         plt.plot(obj)
         plt.pause(0.1)
 
-    return subgradient_vector, moving_average_weights, obj[-1]
+    return subgradient_vector, moving_average_weights, obj
 
+
+def inner_algo_pure(n_dims, inner_regul_param, representation_d, features, labels, inner_algo_method='algo_w', train_plot=0):
+
+    representation_d_inv = np.linalg.pinv(representation_d)
+    total_n_points = features.shape[0]
+
+    if inner_algo_method == 'algo_w':
+        def absolute_loss(curr_features, curr_labels, weight_vector):
+            loss = np.linalg.norm(curr_labels - curr_features @ weight_vector, ord=1)
+            loss = loss / total_n_points
+            return loss
+
+        def penalty(weight_vector):
+            penalty_output = inner_regul_param / 2 * weight_vector @ representation_d_inv @ weight_vector
+            return penalty_output
+
+        def subgradient(label, feature, weight_vector):
+            pred = feature @ weight_vector
+            subgrad = np.sign(pred - label)
+            return subgrad
+    else:
+        raise ValueError("Unknown inner algorithm.")
+
+    curr_weight_vector = np.zeros(n_dims)
+    moving_average_weights = curr_weight_vector
+    obj = []
+
+    curr_obj = 10**10
+    n_iter = 0
+    subgradient_vector = np.zeros(total_n_points)
+    while n_iter < 100 * total_n_points or n_iter < total_n_points:
+        n_iter = n_iter + 1
+        prev_obj = curr_obj
+        prev_weight_vector = curr_weight_vector
+        curr_point = np.random.choice(range(total_n_points), 1)[0]
+
+        # Compute subgradient
+        u = subgradient(labels[curr_point], features[curr_point], prev_weight_vector)
+        subgradient_vector[curr_point] = u
+
+        # Update
+        step = 1 / (inner_regul_param * (n_iter + 1))
+        full_subgrad = representation_d @ features[curr_point, :] * u + inner_regul_param * prev_weight_vector
+        # full_subgrad = features[curr_point_idx, :] * u + inner_regul_param * representation_d_inv * prev_weight_vector
+        curr_weight_vector = prev_weight_vector - step * full_subgrad
+
+        moving_average_weights = (moving_average_weights * (n_iter - 1) + curr_weight_vector * 1) / n_iter
+
+        curr_obj = absolute_loss(features, labels, moving_average_weights) + penalty(moving_average_weights)
+        obj.append(curr_obj)
+        # print('iter %8d | obj: %16.5f | step: %16.8f' % (n_iter, curr_obj, step))
+        # if n_iter % (50 * total_n_points) == 0:
+        #     print('iter %8d | obj: %16.5f | step: %16.8f' % (n_iter, curr_obj, step))
+        conv = np.abs(prev_obj - curr_obj) / prev_obj
+        if conv < 1e-8:
+            # print('Conv tol reached: epoch %8d | obj: %10.5f | step: %16.8f' % (n_iter, curr_obj, step))
+            break
+
+    if train_plot == 1:
+        plt.figure(999)
+        plt.clf()
+        plt.plot(obj)
+        plt.pause(0.1)
+
+    return subgradient_vector, moving_average_weights, obj
