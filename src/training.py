@@ -1,10 +1,10 @@
 import numpy as np
 import scipy as sp
-import cvxpy as cp
 import warnings
 import time
+from scipy import sparse
 import matplotlib.pyplot as plt
-from sklearn.metrics import mean_absolute_error, explained_variance_score, mean_squared_error
+from sklearn.metrics import mean_absolute_error, explained_variance_score
 
 
 class LearningToLearnD:
@@ -38,15 +38,10 @@ class LearningToLearnD:
             if cvx is False:
                 _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
             else:
-                x = cp.Variable(features.shape[1])
-                objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
-
-                prob = cp.Problem(objective)
-                prob.solve()
-                weight_vector_ts = np.array(x.value).ravel()
+                weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
             predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
-        test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
+        test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
 
         tt = time.time()
         printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
@@ -61,49 +56,8 @@ class LearningToLearnD:
                                                     curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
             else:
                 with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    features = data.features_tr[task]
-                    labels = data.labels_tr[task]
-                    n_points = features.shape[0]
-                    a = cp.Variable(n_points)
+                    loss_subgradient = conex_solver_dual(data.features_tr[task], data.labels_tr[task], self.inner_regul_param, curr_representation_d)
 
-                    constraints = [cp.norm(a, "inf") <= 1]
-                    expr = cp.indicator(constraints)
-
-                    objective = cp.Minimize((1/n_points) * np.reshape(labels, [1, n_points])*a + expr +
-                                            (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(curr_representation_d) @ features.T * a)**2)
-
-                    prob = cp.Problem(objective)
-                    try:
-                        prob.solve()
-                        loss_subgradient = np.array(a.value).ravel()
-                    except:
-                        print('FAILED FAILED FAILED FAILED FAILED FAILED FAILED FAILED FAILED FAILED FAILED ')
-                        loss_subgradient = np.zeros(data.features_tr[task].shape[0])
-
-            ###################################################################################################################
-            # loss_subgradient_ours, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
-            #                                          representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
-            # features = data.features_tr[task]
-            # labels = data.labels_tr[task]
-            # n_points = features.shape[0]
-            # a = cp.Variable(n_points)
-            #
-            # constraints = [cp.norm(a, "inf") <= 1]
-            # expr = cp.indicator(constraints)
-            #
-            # objective = cp.Minimize((1/n_points) * np.reshape(labels, [1, n_points])*a + expr +
-            #                         (1 / (2 * self.inner_regul_param * n_points**2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a)**2)
-            #
-            # prob = cp.Problem(objective)
-            # prob.solve()
-            # loss_subgradient_cvx = np.array(a.value).ravel()
-            #
-            # print('ours:')
-            # print(loss_subgradient_ours)
-            # print('cvx:')
-            # print(loss_subgradient_cvx)
-            ###################################################################################################################
             # Approximate the gradient
             g = data.features_tr[task].T @ loss_subgradient
             approx_grad = - 1 / (2 * self.inner_regul_param * data.features_tr[task].shape[0] ** 2) * np.outer(g, g)
@@ -114,12 +68,12 @@ class LearningToLearnD:
             method = 'algo_b'
             if method == 'algo_a':
                 # Compute M
-                s, U = np.linalg.eig(-curr_theta/self.meta_algo_regul_param)
-                U = np.real(U)
+                s, matrix_u = np.linalg.eig(-curr_theta/self.meta_algo_regul_param)
+                matrix_u = np.real(matrix_u)
                 s = np.real(s)
                 s_exp = np.exp(s)
 
-                matrix_m = U @ np.diag(s_exp) @ U.T
+                matrix_m = matrix_u @ np.diag(s_exp) @ matrix_u.T
 
                 # matrix_m = sp.linalg.expm(-curr_theta/self.meta_algo_regul_param)
 
@@ -143,17 +97,10 @@ class LearningToLearnD:
                 if cvx is False:
                     _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
                 else:
-                    x = cp.Variable(features.shape[1])
-                    objective = cp.Minimize((1 / features.shape[0]) * cp.sum_entries(cp.abs(features * x - labels)) +
-                                            (self.inner_regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
-
-                    prob = cp.Problem(objective)
-
-                    prob.solve()
-                    weight_vector_ts = np.array(x.value).ravel()
+                    weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
                 predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
-            test_scores.append(mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
+            test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
             printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
                        {'task': task, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
 
@@ -174,7 +121,7 @@ class LearningToLearnD:
         # val_scores = []
         # for val_task_idx, val_task in enumerate(data.val_task_indexes):
         #     predictions_val = self.predict(representation_d, data.features_ts[val_task], data.labels_ts[val_task])
-        #     val_scores.append(mtl_mae_scorer([predictions_val], [data.labels_ts[val_task]]))
+        #     val_scores.append(mtl_scorer([predictions_val], [data.labels_ts[val_task]]))
 
         self.results['val_score'] = 0   # np.average(val_scores)
         self.results['test_scores'] = test_scores
@@ -193,20 +140,18 @@ class LearningToLearnD:
         return self
 
 
-def mtl_mae_scorer(predictions, true_labels, dataset=None):
+def mtl_scorer(predictions, true_labels, dataset=None):
     n_tasks = len(true_labels)
 
     metric = 0
     for task_idx in range(n_tasks):
-        # c_metric = 100 * explained_variance_score(true_labels[task_idx], predictions[task_idx])
         if dataset == 'movielens100k':
             non_zero_idx = np.nonzero(true_labels[task_idx])[0]
             c_metric = mean_absolute_error(true_labels[task_idx][non_zero_idx], predictions[task_idx][non_zero_idx])
+        elif dataset == 'schools':
+            c_metric = 100 * explained_variance_score(true_labels[task_idx], predictions[task_idx])
         else:
             c_metric = mean_absolute_error(true_labels[task_idx], predictions[task_idx])
-        # n_points = len(true_labels[task_idx])
-        # mse = np.linalg.norm(true_labels[task_idx] - predictions[task_idx])**2 / n_points
-        # c_metric = (1 - mse/np.var(true_labels[task_idx]))
 
         metric = metric + c_metric
     metric = metric / n_tasks
@@ -216,17 +161,21 @@ def mtl_mae_scorer(predictions, true_labels, dataset=None):
 
 def psd_trace_projection(matrix_d, constraint):
 
-    s, U = np.linalg.eigh(matrix_d)
+    s, matrix_u = np.linalg.eigh(matrix_d)
     s = np.maximum(s, 0)
 
     if np.sum(s) < constraint:
-        return U @ np.diag(s) @ U.T
+        return matrix_u @ np.diag(s) @ matrix_u.T
 
     search_points = np.insert(s, 0, 0)
     low_idx = 0
     high_idx = len(search_points)-1
+    mid_idx = None
+    matching_point = None
+    s_sum = None
 
-    obj = lambda vec, x: np.sum(np.maximum(vec - x, 0))
+    def obj(vec, x):
+        return np.sum(np.maximum(vec - x, 0))
 
     while low_idx <= high_idx:
         mid_idx = np.int(np.round((low_idx + high_idx) / 2))
@@ -234,7 +183,7 @@ def psd_trace_projection(matrix_d, constraint):
 
         if s_sum == constraint:
             s = np.sort(s)
-            d_proj = U @ np.diag(s) @ U.T
+            d_proj = matrix_u @ np.diag(s) @ matrix_u.T
             return d_proj
         elif s_sum > constraint:
             low_idx = mid_idx + 1
@@ -246,17 +195,17 @@ def psd_trace_projection(matrix_d, constraint):
         intercept = s_sum - slope * search_points[mid_idx]
 
         matching_point = (constraint - intercept) / slope
-        s_sum = obj(s, matching_point)
+        # s_sum = obj(s, matching_point)
     elif s_sum < constraint:
         slope = (s_sum - obj(s, search_points[mid_idx-1])) / (search_points[mid_idx] - search_points[mid_idx-1])
         intercept = s_sum - slope * search_points[mid_idx]
 
         matching_point = (constraint - intercept) / slope
-        s_sum = obj(s, matching_point)
+        # s_sum = obj(s, matching_point)
 
     s = np.maximum(s - matching_point, 0)
     s = np.sort(s)
-    d_proj = U @ np.diag(s) @ U.T
+    d_proj = matrix_u @ np.diag(s) @ matrix_u.T
 
     return d_proj
 
@@ -284,19 +233,7 @@ class IndipendentTaskLearning:
 
         predictions_ts = []
 
-        representation_d_inv = np.linalg.pinv(representation_d)
-
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
-            def absolute_loss(curr_features, curr_labels, weight_vector):
-                loss = np.linalg.norm(curr_labels - curr_features @ weight_vector, ord=1)
-                loss = loss / curr_features.shape[0]
-                return loss
-
-            def penalty(vectorsss):
-                penalty_output = self.inner_regul_param / 2 * vectorsss @ representation_d_inv @ vectorsss
-                return penalty_output
-
-            # _, weight_vector, last_obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, data.features_tr[test_task], data.labels_tr[test_task])
             cvx = False  # True, False
             features = data.features_tr[test_task]
             labels = data.labels_tr[test_task]
@@ -304,48 +241,11 @@ class IndipendentTaskLearning:
             if cvx is False:
                 _, weight_vector, obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
             else:
-                x = cp.Variable(features.shape[1])
-                if sp.sparse.issparse(features) is False:
-                    objective = cp.Minimize((1 / features.shape[0]) * cp.sum_entries(cp.abs(features * x - labels)) + (self.inner_regul_param / 2) * cp.power(cp.norm(x), 2))
-                else:
-                    objective = cp.Minimize((1 / features.shape[0]) * cp.sum_entries(cp.abs(features.toarray() * x - labels)) + (self.inner_regul_param / 2) * cp.power(cp.norm(x), 2))
+                weight_vector = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
-                prob = cp.Problem(objective)
-                try:
-                    prob.solve()
-                except:
-                    prob.solve(solver='SCS')
-                weight_vector = np.array(x.value).ravel()
-
-            # obj_cvx = absolute_loss(features, labels, weight_vector_cvx) + penalty(weight_vector_cvx)
-            # plt.axhline(obj_cvx, xmin=0, xmax=len(obj))
-            # plt.plot(obj, 'g')
-            # plt.pause(0.1)
-
-
-            # obj_ours = absolute_loss(data.features_tr[test_task], data.labels_tr[test_task], weight_vector) + penalty(weight_vector)
-            #
-            # import cvxpy as cp
-            # x = cp.Variable(n_dims)
-            # objective = cp.Minimize(cp.sum_entries(cp.abs(data.features_tr[test_task] * x - data.labels_tr[test_task])) +
-            #                         (self.inner_regul_param / 2) * cp.quad_form(x, representation_d_inv))
-            #
-            # prob = cp.Problem(objective)
-            #
-            # result = prob.solve()
-            # weight_vector = np.array(x.value).ravel()
-            # print(weight_vector_cvx)
-            #
-            # obj_cvx = absolute_loss(data.features_tr[test_task], data.labels_tr[test_task], weight_vector_cvx) + penalty(weight_vector_cvx)
-            #
-            #
-            #
-            #
-            # print('ours: %f' % obj_ours)
-            # print('cvx: %f' % obj_cvx)
             predictions = self.predict(data.features_ts[test_task], weight_vector)
             predictions_ts.append(predictions)
-        test_scores = mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset)
+        test_scores = mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset)
 
         printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % \
                    {'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
@@ -355,7 +255,7 @@ class IndipendentTaskLearning:
         # val_scores = []
         # for val_task_idx, val_task in enumerate(data.val_task_indexes):
         #     predictions_val = self.predict(representation_d, data.features_ts[val_task], data.labels_ts[val_task])
-        #     val_scores.append(mtl_mae_scorer([predictions_val], [data.labels_ts[val_task]]))
+        #     val_scores.append(mtl_scorer([predictions_val], [data.labels_ts[val_task]]))
 
         self.results['val_score'] = 0  # np.average(val_scores)
         self.results['test_scores'] = test_scores
@@ -377,17 +277,13 @@ class IndipendentTaskLearning:
 def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, inner_algo_method='algo_w', train_plot=0):
 
     representation_d_inv = np.linalg.pinv(representation_d)
-    # if sp.sparse.issparse(features) is False:
-    #     total_n_points = features.shape[0]
-    # else:
-    #     total_n_points = len(np.nonzero(labels)[0])
 
     total_n_points = features.shape[0]
 
     if inner_algo_method == 'algo_w':
         def absolute_loss(curr_features, curr_labels, weight_vector):
             loss = np.linalg.norm(curr_labels - curr_features @ weight_vector, ord=1)
-            if sp.sparse.issparse(features) is False:
+            if sparse.issparse(features) is False:
                 loss = loss / total_n_points
             else:
                 loss = loss / len(np.nonzero(labels)[0])
@@ -520,3 +416,45 @@ def inner_algo_pure(n_dims, inner_regul_param, representation_d, features, label
         plt.pause(0.1)
 
     return subgradient_vector, moving_average_weights, obj
+
+
+def convex_solver_primal(features, labels, regul_param, representation_d):
+    import cvxpy as cp
+    x = cp.Variable(features.shape[1])
+    objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+
+    prob = cp.Problem(objective)
+    try:
+        prob.solve()
+    except Exception as e:
+        print(e)
+        prob.solve(solver='SCS')
+    weight_vector = np.array(x.value).ravel()
+    return weight_vector
+
+
+def conex_solver_dual(features, labels, regul_param, representation_d):
+    import cvxpy as cp
+    loss_subgradient = np.zeros(features.shape[0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        n_points = features.shape[0]
+        a = cp.Variable(n_points)
+
+        constraints = [cp.norm(a, "inf") <= 1]
+        expr = cp.indicator(constraints)
+
+        objective = cp.Minimize((1 / n_points) * np.reshape(labels, [1, n_points]) * a + expr +
+                                (1 / (2 * regul_param * n_points ** 2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a) ** 2)
+
+        prob = cp.Problem(objective)
+        try:
+            prob.solve()
+            loss_subgradient = np.array(a.value).ravel()
+        except Exception as e:
+            print(e)
+            try:
+                prob.solve(solver='SCS')
+            except Exception as e:
+                print(e)
+    return loss_subgradient

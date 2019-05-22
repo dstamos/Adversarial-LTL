@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 import time
-from src.training import mtl_mae_scorer
+from src.training import mtl_scorer
 
 
 class MultitaskLearning:
@@ -31,7 +31,7 @@ class MultitaskLearning:
         predictions_ts = []
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
             predictions_ts.append(self.predict(data.features_ts[test_task], weights_matrix[:, test_task]))
-        test_scores = mtl_mae_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes])
+        test_scores = mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes])
 
         self.results['val_score'] = 0
         self.results['test_scores'] = test_scores
