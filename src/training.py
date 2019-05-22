@@ -420,9 +420,9 @@ def inner_algo_pure(n_dims, inner_regul_param, representation_d, features, label
 
 
 def convex_solver_primal(features, labels, regul_param, representation_d):
-    fista = False
+    fista_method = False
 
-    if fista is False:
+    if fista_method is False:
         import cvxpy as cp
         x = cp.Variable(features.shape[1])
         objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
@@ -435,7 +435,8 @@ def convex_solver_primal(features, labels, regul_param, representation_d):
             prob.solve(solver='SCS')
         weight_vector = np.array(x.value).ravel()
     else:
-
+        weight_vector = None
+        pass
 
     return weight_vector
 
