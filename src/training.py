@@ -3,6 +3,7 @@ import scipy as sp
 import warnings
 import time
 from scipy import sparse
+from scipy.sparse.linalg import eigsh
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, explained_variance_score
 
@@ -419,17 +420,23 @@ def inner_algo_pure(n_dims, inner_regul_param, representation_d, features, label
 
 
 def convex_solver_primal(features, labels, regul_param, representation_d):
-    import cvxpy as cp
-    x = cp.Variable(features.shape[1])
-    objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+    fista = False
 
-    prob = cp.Problem(objective)
-    try:
-        prob.solve()
-    except Exception as e:
-        print(e)
-        prob.solve(solver='SCS')
-    weight_vector = np.array(x.value).ravel()
+    if fista is False:
+        import cvxpy as cp
+        x = cp.Variable(features.shape[1])
+        objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+
+        prob = cp.Problem(objective)
+        try:
+            prob.solve()
+        except Exception as e:
+            print(e)
+            prob.solve(solver='SCS')
+        weight_vector = np.array(x.value).ravel()
+    else:
+
+
     return weight_vector
 
 
@@ -458,3 +465,61 @@ def conex_solver_dual(features, labels, regul_param, representation_d):
             except Exception as e:
                 print(e)
     return loss_subgradient
+
+
+def fista(features, labels, regul_param, representation_d):
+    if sparse.issparse(features) is False:
+        n_points = features.shape[0]
+    else:
+        n_points = len(np.nonzero(labels)[0])
+
+    largest_eigenval = eigsh(features @ features.T, k=1, which='LM')
+    lipschitz_constant = (regul_param * n_points) / (np.linalg.norm(representation_d, ord="inf") * largest_eigenval)
+
+    def penalty(xx):
+        return 1 / (2 * regul_param * n_points) * np.linalg.norm(sp.linalg.sqrtm(representation_d) @ features.T @ xx, ord='fro')**2
+
+    def prox(xx):
+        # TODO Implement the prox
+        return np.sign(xx) * np.maximum(abs(xx) - regul_param / lipschitz_constant, 0)
+
+    def loss(xx):
+        return 1 / n_points * labels @ xx
+
+    def grad(xx):
+        return 1 / (n_points ** 2 * regul_param) * features @ representation_d @ features.T @ xx
+
+    pee = np.random.randn(n_points)
+    alpha = np.random.randn(n_points)
+
+    curr_iter = 0
+    curr_cost = loss(alpha) + penalty(alpha)
+    theta = 1
+    objectives = []
+
+    t = time.time()
+    while curr_iter < 10 ** 5:
+        curr_iter = curr_iter + 1
+        prev_cost = curr_cost
+        prev_pee = pee
+
+        step_size = (1 / lipschitz_constant)
+        search_point = alpha - step_size * grad(alpha)
+        pee = prox(search_point)
+
+        theta = (np.sqrt(theta ** 4 + 4 * theta ** 2) - theta ** 2) / 2
+        rho = 1 - theta + np.sqrt(1 - theta)
+        alpha = rho * pee - (rho - 1) * prev_pee
+
+        curr_cost = loss(alpha) + penalty(alpha)
+
+        objectives.append(curr_cost)
+        diff = abs(prev_cost - curr_cost) / prev_cost
+
+        if diff < 1e-5:
+            break
+
+        if time.time() - t > 0:
+            t = time.time()
+            print('iter: %6d | cost: %20.8f ~ tol: %18.15f | step: %12.10f' % (curr_iter, curr_cost, diff, step_size))
+    return alpha
