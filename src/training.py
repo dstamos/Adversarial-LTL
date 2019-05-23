@@ -9,12 +9,13 @@ from sklearn.metrics import mean_absolute_error, explained_variance_score
 
 
 class LearningToLearnD:
-    def __init__(self, data_info, logger, meta_algo_regul_param=0.1, inner_regul_param=0.1, verbose=1):
+    def __init__(self, data_info, logger, training_info, verbose=1):
         self.verbose = verbose
         self.data_info = data_info
         self.logger = logger
-        self.meta_algo_regul_param = meta_algo_regul_param
-        self.inner_regul_param = inner_regul_param
+        self.meta_algo_regul_param = training_info.inner_regul_param
+        self.inner_regul_param = training_info.meta_algo_regul_param
+        self.training_info = training_info
 
         self.results = {'val_score': 0, 'test_scores': []}
 
@@ -149,19 +150,20 @@ class LearningToLearnD:
 
 
 class IndipendentTaskLearning:
-    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=0.1, verbose=1):
+    def __init__(self, data_info, logger, training_info, verbose=1):
         self.verbose = verbose
         self.data_info = data_info
         self.logger = logger
-        self.meta_algo_regul_param = meta_algo_regul_param
-        self.inner_regul_param = inner_regul_param
+        self.meta_algo_regul_param = training_info.meta_algo_regul_param
+        self.inner_regul_param = training_info.inner_regul_param
+        self.training_info = training_info
 
         self.results = {'val_score': 0, 'test_scores': []}
 
         self.representation_d = None
 
     def fit(self, data):
-        print('ITL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
+        print(self.training_info.method + ' | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = data.data_info.n_dims
 
         representation_d = np.eye(n_dims)
@@ -172,7 +174,10 @@ class IndipendentTaskLearning:
         predictions_ts = []
 
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
-            cvx = True  # True, False
+            if self.training_info.method == 'ITL_ERM':
+                cvx = True  # True, False
+            else:
+                cvx = False
             features = data.features_tr[test_task]
             labels = data.labels_tr[test_task]
 
@@ -337,7 +342,6 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
 
             curr_obj = absolute_loss(features, labels, curr_weight_vector) + penalty(curr_weight_vector)
             obj.append(curr_obj)
-            print('iter %5d | %10.5f' % (curr_point_idx, curr_obj))
         # print('epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
         curr_epoch_obj = obj[-1]
         conv = np.abs(curr_epoch_obj - prev_epoch_obj) / prev_epoch_obj
@@ -536,7 +540,7 @@ def fista(features, labels, regul_param, representation_d):
     def grad(xx):
         return 1 / (n_points ** 2 * regul_param) * features @ representation_d @ features.T @ xx
 
-    a = np.random.randn(n_points)
+    a = np.random.randn(features.shape[0])
     p = a
     primal_weight_vector = np.random.randn(features.shape[1])
 
@@ -546,7 +550,7 @@ def fista(features, labels, regul_param, representation_d):
     objectives = []
 
     t = time.time()
-    while curr_iter < 10 ** 8:
+    while curr_iter < 10 ** 4:
         curr_iter = curr_iter + 1
         prev_cost = curr_cost
         prev_tau = tau
@@ -574,7 +578,7 @@ def fista(features, labels, regul_param, representation_d):
         # print('iter: ', curr_iter)
         # print(primal_weight_vector)
         # print('\n')
-        if diff < 1e-8:
+        if diff < 1e-6:
             break
 
         if time.time() - t > 60:

@@ -21,10 +21,8 @@ class DataSettings:
 class TrainingSettings:
     def __init__(self, training_dict):
         self.method = training_dict['method']
-        self.convergence_tol = training_dict['convergence_tol']
         self.inner_regul_param = training_dict['inner_regul_param']
-        self.meta_algo_regul_param = [np.nan]
+        self.meta_algo_regul_param = training_dict['meta_algo_regul_param']
 
-        if self.method == 'temp_method':
+        if self.method == 'LTL_SGD-SGD' or self.method == 'LTL_ERM-SGD' or self.method == 'LTL_Oracle-SGD':
             self.meta_algo_regul_param = training_dict['meta_algo_regul_param']
-
