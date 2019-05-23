@@ -115,7 +115,7 @@ class LearningToLearnD:
                 predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
             test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
             printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
-                       {'task': task, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
+                       {'task': task_idx, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
 
             if time.time() - hourglass > 30:
                 self.results['val_score'] = np.nan

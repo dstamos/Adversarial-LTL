@@ -20,7 +20,7 @@ if __name__ == "__main__":
     else:
         seed = 999
         dataset_idx = 2  # 0: synthetic, 1: schools, 2: movielens100k
-        method_idx = 2  # 0: ITL_SGD, 1: ITL_ERM, 2: LTL_SGD-SGD, 3: LTL_ERM-SGD, 4: LTL_Oracle-SGD
+        method_idx = 3  # 0: ITL_SGD, 1: ITL_ERM, 2: LTL_SGD-SGD, 3: LTL_ERM-SGD, 4: LTL_Oracle-SGD
         inner_param_idx = 0
         meta_param_idx = 0
 
@@ -46,9 +46,9 @@ if __name__ == "__main__":
                           'seed': seed}
     elif dataset_idx == 2:
         data_info_dict = {'dataset': 'movielens100k',
-                          'n_tr_tasks': 500,    # 500
-                          'n_val_tasks': 100,   # 100
-                          'n_test_tasks': 343,  # 343
+                          'n_tr_tasks': 900,    # 500
+                          'n_val_tasks': 2,   # 100
+                          'n_test_tasks': 41,  # 343
                           'ts_points_pct': 0.25,
                           'seed': seed}
     else:
