@@ -45,22 +45,22 @@ if __name__ == "__main__":
     #                   'ts_points_pct': 0.25,
     #                   'seed': 999}
 
-    training_info_dict = {'method': 'temp_method',
-                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 10)],
-                          'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-4, 3, 10)],
-                          'convergence_tol': 10 ** -4}
+    # training_info_dict = {'method': 'temp_method',
+    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 10)],
+    #                       'meta_algo_regul_param': [10 ** float(i) for i in np.linspace(-4, 3, 10)],
+    #                       'convergence_tol': 10 ** -4}
     # training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][6]]
     # training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][4]]
 
-    # training_info_dict = {'method': 'indipendent',
-    #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-8, 4, 30)],
-    #                       'meta_algo_regul_param': [np.nan],
-    #                       'convergence_tol': 10 ** -4}
+    training_info_dict = {'method': 'indipendent',
+                          'inner_regul_param': [10 ** float(i) for i in np.linspace(-8, 4, 30)],
+                          'meta_algo_regul_param': [np.nan],
+                          'convergence_tol': 10 ** -4}
     # training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][3]]
     # training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][5]]
 
     # training_info_dict['meta_algo_regul_param'] = [training_info_dict['meta_algo_regul_param'][5]]
-    training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][5]]
+    # training_info_dict['inner_regul_param'] = [training_info_dict['inner_regul_param'][15]]
 
     # training_info_dict = {'method': 'multitask',
     #                       'inner_regul_param': [10 ** float(i) for i in np.linspace(-6, 3, 20)],

@@ -172,7 +172,7 @@ class IndipendentTaskLearning:
         predictions_ts = []
 
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
-            cvx = False  # True, False
+            cvx = True  # True, False
             features = data.features_tr[test_task]
             labels = data.labels_tr[test_task]
 
@@ -421,12 +421,16 @@ def inner_algo_pure(n_dims, inner_regul_param, representation_d, features, label
 
 
 def convex_solver_primal(features, labels, regul_param, representation_d):
-    fista_method = False  # True, False
+    fista_method = True  # True, False
 
     if fista_method is False:
         import cvxpy as cp
+        if sparse.issparse(features) is False:
+            n_points = features.shape[0]
+        else:
+            n_points = len(np.nonzero(labels)[0])
         x = cp.Variable(features.shape[1])
-        objective = cp.Minimize(cp.sum_entries(cp.abs(features * x - labels)) + (regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+        objective = cp.Minimize((1 / n_points) * cp.sum_entries(cp.abs(features * x - labels)) + (regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
 
         prob = cp.Problem(objective)
         try:
@@ -438,17 +442,44 @@ def convex_solver_primal(features, labels, regul_param, representation_d):
     else:
         primal_weight_vector, _ = fista(features, labels, regul_param, representation_d)
 
+    # Sanity check
+    # if sparse.issparse(features) is False:
+    #     n_points = features.shape[0]
+    # else:
+    #     n_points = len(np.nonzero(labels)[0])
+    #
+    # ################################
+    # # CVX
+    # ################################
+    # import cvxpy as cp
+    # x = cp.Variable(features.shape[1])
+    # objective = cp.Minimize((1 / n_points) * cp.sum_entries(cp.abs(features * x - labels)) + (regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+    #
+    # prob = cp.Problem(objective)
+    # prob.solve()
+    # primal_weight_vector = np.array(x.value).ravel()
+    # print('cvx: \n', primal_weight_vector)
+    # print('\n')
+    # ################################
+    # # Fista
+    # ################################
+    # primal_weight_vector, _ = fista(features, labels, regul_param, representation_d)
+    # print('fista: \n', primal_weight_vector)
+    # print('\n')
     return primal_weight_vector
 
 
 def conex_solver_dual(features, labels, regul_param, representation_d):
-    fista_method = True  # True, False
+    fista_method = False  # True, False
 
     if fista_method is False:
         import cvxpy as cp
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            n_points = features.shape[0]
+            if sparse.issparse(features) is False:
+                n_points = features.shape[0]
+            else:
+                n_points = len(np.nonzero(labels)[0])
             a = cp.Variable(n_points)
 
             constraints = [cp.norm(a, "inf") <= 1]
@@ -478,62 +509,75 @@ def fista(features, labels, regul_param, representation_d):
     else:
         n_points = len(np.nonzero(labels)[0])
 
+    # TODO Double check this
     largest_eigenval = eigsh(representation_d, k=1, which='LM')[0][0]
-    lipschitz_constant = (largest_eigenval * max([np.linalg.norm(features[i, :]) for i in range(n_points)])) / (regul_param * n_points)
-    # lipschitz_constant = (largest_eigenval * 1) / (regul_param * n_points)
+    # lipschitz_constant = (largest_eigenval * max([np.linalg.norm(features[i, :]) for i in range(n_points)])) / (regul_param * n_points)
+    lipschitz_constant = (largest_eigenval * 1) / (regul_param * n_points)
     step_size = (1 / lipschitz_constant)
 
-    def penalty(xx):
-        return 1 / (2 * regul_param * n_points) * np.linalg.norm(sp.linalg.sqrtm(representation_d) @ features.T @ xx)**2
+    def obj_fun(xx):
+        return (1 / n_points) * np.linalg.norm(features @ xx - labels, ord=1) + \
+               (regul_param / 2) * xx.T @ np.linalg.pinv(representation_d) @ xx
 
     def prox(xx):
-        prox_diff = xx - labels
 
-        thresh = n_points / step_size
+        # Eq 120
+        eta = step_size / n_points
+        prox_diff = xx/eta - labels
+        thresh = 1 / eta
         prox_point = np.copy(labels)
-        prox_point[prox_diff < - thresh] = (xx + thresh)[prox_diff < - thresh]
-        prox_point[prox_diff > thresh] = (xx - thresh)[prox_diff > thresh]
-        return prox_point
+        prox_point[prox_diff < - thresh] = (xx/eta + thresh)[prox_diff < - thresh]
+        prox_point[prox_diff > thresh] = (xx/eta - thresh)[prox_diff > thresh]
 
-    def loss(xx):
-        return 1 / n_points * labels @ xx
+        # Moreau identity
+        prox_point = xx - eta * prox_point
+        return prox_point
 
     def grad(xx):
         return 1 / (n_points ** 2 * regul_param) * features @ representation_d @ features.T @ xx
 
-    pee = np.random.randn(n_points)
-    alpha = np.random.randn(n_points)
-    primal_weight_vector = None
+    a = np.random.randn(n_points)
+    p = a
+    primal_weight_vector = np.random.randn(features.shape[1])
 
     curr_iter = 0
-    curr_cost = loss(alpha) + penalty(alpha)
-    theta = 1
+    curr_cost = obj_fun(primal_weight_vector)
+    tau = 1
     objectives = []
 
     t = time.time()
-    while curr_iter < 10 ** 3:
+    while curr_iter < 10 ** 8:
         curr_iter = curr_iter + 1
         prev_cost = curr_cost
-        prev_pee = pee
+        prev_tau = tau
+        prev_a = a
 
-        search_point = alpha - step_size * grad(alpha)
-        pee = prox(search_point)
+        a = prox(p - step_size * grad(p))
+        # print('iter: ', curr_iter)
+        # print(a)
+        # print('\n')
 
-        primal_weight_vector = - 1 / (n_points * regul_param) * representation_d @ features.T @ pee
+        primal_weight_vector = - 1 / (n_points * regul_param) * representation_d @ features.T @ a
 
-        theta = (np.sqrt(theta ** 4 + 4 * theta ** 2) - theta ** 2) / 2
-        rho = 1 - theta + np.sqrt(1 - theta)
-        alpha = rho * pee - (rho - 1) * prev_pee
+        # theta = (np.sqrt(theta ** 4 + 4 * theta ** 2) - theta ** 2) / 2
+        # rho = 1 - theta + np.sqrt(1 - theta)
+        # p = rho * a - (rho - 1) * prev_a
 
-        curr_cost = loss(alpha) + penalty(alpha)
+        tau = (1 + np.sqrt(1 + 4 * prev_tau**2)) / 2
+        p = a + ((prev_tau - 1) / tau) * (a - prev_a)
+
+        curr_cost = obj_fun(primal_weight_vector)
 
         objectives.append(curr_cost)
         diff = abs(prev_cost - curr_cost) / prev_cost
 
-        if diff < 1e-5:
+        # print('iter: ', curr_iter)
+        # print(primal_weight_vector)
+        # print('\n')
+        if diff < 1e-8:
             break
 
         if time.time() - t > 60:
             t = time.time()
             print('iter: %6d | cost: %20.8f ~ tol: %18.15f | step: %12.10f' % (curr_iter, curr_cost, diff, step_size))
-    return primal_weight_vector, alpha
+    return primal_weight_vector, a
