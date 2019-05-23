@@ -29,6 +29,7 @@ class LearningToLearnD:
         curr_representation_d = np.eye(n_dims) / n_dims
         representation_d = curr_representation_d
 
+        tt = time.time()
         if self.training_info.method == 'LTL_ERM-ERM':
             cvx = True
         else:
@@ -47,7 +48,6 @@ class LearningToLearnD:
             predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
         test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
 
-        tt = time.time()
         printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
                    {'task': -1, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
         self.logger.log_event(printout)
@@ -186,11 +186,10 @@ class IndipendentTaskLearning:
 
         representation_d = np.eye(n_dims)
 
-        tt = time.time()
         self.representation_d = representation_d
 
         predictions_ts = []
-
+        tt = time.time()
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
             if self.training_info.method == 'ITL_ERM':
                 cvx = True  # True, False
@@ -206,6 +205,7 @@ class IndipendentTaskLearning:
 
             predictions = self.predict(data.features_ts[test_task], weight_vector)
             predictions_ts.append(predictions)
+            print('T: %3d trained | %7.2f' % (test_task_idx, time.time() - tt))
         test_scores = mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset)
 
         printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % \
@@ -531,14 +531,18 @@ def fista(features, labels, regul_param, representation_d):
     else:
         n_points = len(np.nonzero(labels)[0])
 
-    largest_eigenval = eigsh(representation_d, k=1, which='LM')[0][0]
+    try:
+        largest_eigenval = eigsh(representation_d, k=1, which='LM')[0][0]
+    except Exception as e:
+        print(e)
+        largest_eigenval = sp.sparse.linalg.svds(representation_d)[1][-1]
     # lipschitz_constant = (largest_eigenval * max([np.linalg.norm(features[i, :]) for i in range(n_points)])) / (regul_param * n_points)
     lipschitz_constant = (largest_eigenval * 1) / (regul_param * n_points)
     step_size = (1 / lipschitz_constant)
 
-    def obj_fun(xx):
-        return (1 / n_points) * np.linalg.norm(features @ xx - labels, ord=1) + \
-               (regul_param / 2) * xx.T @ np.linalg.pinv(representation_d) @ xx
+    # def obj_fun(xx):
+    #     return (1 / n_points) * np.linalg.norm(features @ xx - labels, ord=1) + \
+    #            (regul_param / 2) * xx.T @ np.linalg.pinv(representation_d) @ xx
 
     def prox(xx):
 
@@ -562,14 +566,14 @@ def fista(features, labels, regul_param, representation_d):
     primal_weight_vector = np.random.randn(features.shape[1])
 
     curr_iter = 0
-    curr_cost = obj_fun(primal_weight_vector)
+    # curr_cost = obj_fun(primal_weight_vector)
     tau = 1
-    objectives = []
+    # objectives = []
 
     t = time.time()
     while curr_iter < 10 ** 4:
         curr_iter = curr_iter + 1
-        prev_cost = curr_cost
+        # prev_cost = curr_cost
         prev_tau = tau
         prev_a = a
 
@@ -587,10 +591,10 @@ def fista(features, labels, regul_param, representation_d):
         tau = (1 + np.sqrt(1 + 4 * prev_tau**2)) / 2
         p = a + ((prev_tau - 1) / tau) * (a - prev_a)
 
-        curr_cost = obj_fun(primal_weight_vector)
-
-        objectives.append(curr_cost)
-        diff = abs(prev_cost - curr_cost) / prev_cost
+        diff = np.linalg.norm(a - prev_a) / np.linalg.norm(prev_a)
+        # curr_cost = obj_fun(primal_weight_vector)
+        # objectives.append(curr_cost)
+        # diff = abs(prev_cost - curr_cost) / prev_cost
 
         # print('iter: ', curr_iter)
         # print(primal_weight_vector)
@@ -598,7 +602,7 @@ def fista(features, labels, regul_param, representation_d):
         if diff < 1e-6:
             break
 
-        if time.time() - t > 60:
+        if time.time() - t > 30:
             t = time.time()
-            print('iter: %6d | cost: %20.8f ~ tol: %18.15f | step: %12.10f' % (curr_iter, curr_cost, diff, step_size))
+            print('iter: %6d | tol: %18.15f | step: %12.10f' % (curr_iter, diff, step_size))
     return primal_weight_vector, a
