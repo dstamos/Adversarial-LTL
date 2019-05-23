@@ -5,13 +5,11 @@ import time
 
 
 class Logger:
-    def __init__(self, data_info, training_info):
+    def __init__(self, data_info, training_info, inner_param, outer_param):
         self.data_info = data_info
         self.training_info = training_info
-        self.results_filename = "seed_" + str(data_info.seed)
-        self.results_foldername = 'results/' + data_info.dataset + \
-                                  '-T_' + str(data_info.n_tr_tasks) + \
-                                  '/' + training_info.method
+        self.results_filename = "seed_" + str(data_info.seed) + '_' + str(inner_param) + '_' + str(outer_param)
+        self.results_full_path = 'results/' + data_info.dataset + '/' + training_info.method
 
         if not os.path.exists('results'):
             os.makedirs('results')
@@ -23,9 +21,9 @@ class Logger:
                             filename="logs/%(date_time)s_" + self.results_filename + ".log" % {'date_time': time.strftime("%Y-%m-%d_%H.%M.%S")}, level=logging.INFO)
 
     def save(self, results):
-        if not os.path.exists(self.results_foldername):
-            os.makedirs(self.results_foldername)
-        f = open(self.results_foldername + '/' + self.results_foldername + ".pckl", 'wb')
+        if not os.path.exists(self.results_full_path):
+            os.makedirs(self.results_full_path)
+        f = open(self.results_full_path + '/' + self.results_filename + ".pckl", 'wb')
         pickle.dump(results, f)
         pickle.dump(self.data_info, f)
         pickle.dump(self.training_info, f)

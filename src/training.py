@@ -24,7 +24,7 @@ class LearningToLearnD:
         print('LTL | optimizing for inner param: %12f and outer param: %12f' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = self.data_info.n_dims
 
-        cvx = False   # True, False
+        cvx = True   # True, False
 
         curr_theta = np.zeros((n_dims, n_dims))
         curr_representation_d = np.eye(n_dims) / n_dims
@@ -118,17 +118,82 @@ class LearningToLearnD:
         plt.pause(0.1)
         plt.savefig('schools-inner_' + str(self.inner_regul_param) + '-outer_' + str(self.meta_algo_regul_param) + '.png')
 
-        # TODO Optimization wrt w on val tasks, training points
-        # val_scores = []
-        # for val_task_idx, val_task in enumerate(data.val_task_indexes):
-        #     predictions_val = self.predict(representation_d, data.features_ts[val_task], data.labels_ts[val_task])
-        #     val_scores.append(mtl_scorer([predictions_val], [data.labels_ts[val_task]]))
+        predictions_val = []
+        for val_task_idx, val_task in enumerate(data.val_task_indexes):
+            features = data.features_tr[val_task]
+            labels = data.labels_tr[val_task]
 
-        self.results['val_score'] = 0   # np.average(val_scores)
+            if cvx is False:
+                _, weight_vector_val, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
+            else:
+                weight_vector_val = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
+
+            predictions_val.append(self.predict(weight_vector_val, data.features_ts[val_task]))
+        val_score = mtl_scorer(predictions_val, [data.labels_ts[i] for i in data.val_task_indexes], dataset=self.data_info.dataset)
+
+        self.results['val_score'] = val_score
         self.results['test_scores'] = test_scores
 
     @staticmethod
     def predict(weight_vector, features):
+        predictions = features @ weight_vector
+        return predictions
+
+    def get_params(self):
+        return {"meta_algo_regul_param": self.meta_algo_regul_param, "inner_regul_param": self.inner_regul_param}
+
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        return self
+
+
+class IndipendentTaskLearning:
+    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=0.1, verbose=1):
+        self.verbose = verbose
+        self.data_info = data_info
+        self.logger = logger
+        self.meta_algo_regul_param = meta_algo_regul_param
+        self.inner_regul_param = inner_regul_param
+
+        self.results = {'val_score': 0, 'test_scores': []}
+
+        self.representation_d = None
+
+    def fit(self, data):
+        print('ITL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
+        n_dims = data.data_info.n_dims
+
+        representation_d = np.eye(n_dims)
+
+        tt = time.time()
+        self.representation_d = representation_d
+
+        predictions_ts = []
+
+        for test_task_idx, test_task in enumerate(data.test_task_indexes):
+            cvx = False  # True, False
+            features = data.features_tr[test_task]
+            labels = data.labels_tr[test_task]
+
+            if cvx is False:
+                _, weight_vector, obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
+            else:
+                weight_vector = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
+
+            predictions = self.predict(data.features_ts[test_task], weight_vector)
+            predictions_ts.append(predictions)
+        test_scores = mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset)
+
+        printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % \
+                   {'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
+        self.logger.log_event(printout)
+
+        self.results['val_score'] = test_scores
+        self.results['test_scores'] = test_scores
+
+    @staticmethod
+    def predict(features, weight_vector):
         predictions = features @ weight_vector
         return predictions
 
@@ -209,70 +274,6 @@ def psd_trace_projection(matrix_d, constraint):
     d_proj = matrix_u @ np.diag(s) @ matrix_u.T
 
     return d_proj
-
-
-class IndipendentTaskLearning:
-    def __init__(self, data_info, logger, meta_algo_regul_param=1e-1, inner_regul_param=0.1, verbose=1):
-        self.verbose = verbose
-        self.data_info = data_info
-        self.logger = logger
-        self.meta_algo_regul_param = meta_algo_regul_param
-        self.inner_regul_param = inner_regul_param
-
-        self.results = {'val_score': 0, 'test_scores': []}
-
-        self.representation_d = None
-
-    def fit(self, data):
-        print('ITL | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
-        n_dims = data.data_info.n_dims
-
-        representation_d = np.eye(n_dims)
-
-        tt = time.time()
-        self.representation_d = representation_d
-
-        predictions_ts = []
-
-        for test_task_idx, test_task in enumerate(data.test_task_indexes):
-            cvx = True  # True, False
-            features = data.features_tr[test_task]
-            labels = data.labels_tr[test_task]
-
-            if cvx is False:
-                _, weight_vector, obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
-            else:
-                weight_vector = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
-
-            predictions = self.predict(data.features_ts[test_task], weight_vector)
-            predictions_ts.append(predictions)
-        test_scores = mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset)
-
-        printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % \
-                   {'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
-        self.logger.log_event(printout)
-
-        # TODO Optimization wrt w on val tasks, training points
-        # val_scores = []
-        # for val_task_idx, val_task in enumerate(data.val_task_indexes):
-        #     predictions_val = self.predict(representation_d, data.features_ts[val_task], data.labels_ts[val_task])
-        #     val_scores.append(mtl_scorer([predictions_val], [data.labels_ts[val_task]]))
-
-        self.results['val_score'] = 0  # np.average(val_scores)
-        self.results['test_scores'] = test_scores
-
-    @staticmethod
-    def predict(features, weight_vector):
-        predictions = features @ weight_vector
-        return predictions
-
-    def get_params(self):
-        return {"meta_algo_regul_param": self.meta_algo_regul_param, "inner_regul_param": self.inner_regul_param}
-
-    def set_params(self, **parameters):
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
-        return self
 
 
 def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, inner_algo_method='algo_w', train_plot=0):
@@ -433,38 +434,41 @@ def convex_solver_primal(features, labels, regul_param, representation_d):
         except Exception as e:
             print(e)
             prob.solve(solver='SCS')
-        weight_vector = np.array(x.value).ravel()
+        primal_weight_vector = np.array(x.value).ravel()
     else:
-        weight_vector = None
         primal_weight_vector, _ = fista(features, labels, regul_param, representation_d)
 
-    return weight_vector
+    return primal_weight_vector
 
 
 def conex_solver_dual(features, labels, regul_param, representation_d):
-    import cvxpy as cp
-    loss_subgradient = np.zeros(features.shape[0])
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        n_points = features.shape[0]
-        a = cp.Variable(n_points)
+    fista_method = True  # True, False
 
-        constraints = [cp.norm(a, "inf") <= 1]
-        expr = cp.indicator(constraints)
+    if fista_method is False:
+        import cvxpy as cp
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            n_points = features.shape[0]
+            a = cp.Variable(n_points)
 
-        objective = cp.Minimize((1 / n_points) * np.reshape(labels, [1, n_points]) * a + expr +
-                                (1 / (2 * regul_param * n_points ** 2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a) ** 2)
+            constraints = [cp.norm(a, "inf") <= 1]
+            expr = cp.indicator(constraints)
 
-        prob = cp.Problem(objective)
-        try:
-            prob.solve()
-            loss_subgradient = np.array(a.value).ravel()
-        except Exception as e:
-            print(e)
+            objective = cp.Minimize((1 / n_points) * np.reshape(labels, [1, n_points]) * a + expr +
+                                    (1 / (2 * regul_param * n_points ** 2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a) ** 2)
+
+            prob = cp.Problem(objective)
             try:
-                prob.solve(solver='SCS')
+                prob.solve()
             except Exception as e:
                 print(e)
+                try:
+                    prob.solve(solver='SCS')
+                except Exception as e:
+                    print(e)
+            loss_subgradient = np.array(a.value).ravel()
+    else:
+        _, loss_subgradient = fista(features, labels, regul_param, representation_d)
     return loss_subgradient
 
 
@@ -474,8 +478,10 @@ def fista(features, labels, regul_param, representation_d):
     else:
         n_points = len(np.nonzero(labels)[0])
 
-    largest_eigenval = eigsh(features @ features.T, k=1, which='LM')[0][0]
-    lipschitz_constant = (regul_param * n_points) / (np.linalg.norm(representation_d, ord=2) * largest_eigenval)
+    largest_eigenval = eigsh(representation_d, k=1, which='LM')[0][0]
+    lipschitz_constant = (largest_eigenval * max([np.linalg.norm(features[i, :]) for i in range(n_points)])) / (regul_param * n_points)
+    # lipschitz_constant = (largest_eigenval * 1) / (regul_param * n_points)
+    step_size = (1 / lipschitz_constant)
 
     def penalty(xx):
         return 1 / (2 * regul_param * n_points) * np.linalg.norm(sp.linalg.sqrtm(representation_d) @ features.T @ xx)**2
@@ -483,7 +489,7 @@ def fista(features, labels, regul_param, representation_d):
     def prox(xx):
         prox_diff = xx - labels
 
-        thresh = regul_param / lipschitz_constant
+        thresh = n_points / step_size
         prox_point = np.copy(labels)
         prox_point[prox_diff < - thresh] = (xx + thresh)[prox_diff < - thresh]
         prox_point[prox_diff > thresh] = (xx - thresh)[prox_diff > thresh]
@@ -505,12 +511,11 @@ def fista(features, labels, regul_param, representation_d):
     objectives = []
 
     t = time.time()
-    while curr_iter < 10 ** 5:
+    while curr_iter < 10 ** 3:
         curr_iter = curr_iter + 1
         prev_cost = curr_cost
         prev_pee = pee
 
-        step_size = (1 / lipschitz_constant)
         search_point = alpha - step_size * grad(alpha)
         pee = prox(search_point)
 
@@ -528,7 +533,7 @@ def fista(features, labels, regul_param, representation_d):
         if diff < 1e-5:
             break
 
-        if time.time() - t > 0:
+        if time.time() - t > 60:
             t = time.time()
             print('iter: %6d | cost: %20.8f ~ tol: %18.15f | step: %12.10f' % (curr_iter, curr_cost, diff, step_size))
     return primal_weight_vector, alpha
