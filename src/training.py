@@ -502,12 +502,12 @@ def conex_solver_dual(features, labels, regul_param, representation_d):
                 n_points = features.shape[0]
             else:
                 n_points = len(np.nonzero(labels)[0])
-            a = cp.Variable(n_points)
+            a = cp.Variable(features.shape[0])
 
             constraints = [cp.norm(a, "inf") <= 1]
             expr = cp.indicator(constraints)
 
-            objective = cp.Minimize((1 / n_points) * np.reshape(labels, [1, n_points]) * a + expr +
+            objective = cp.Minimize((1 / n_points) * np.reshape(labels, [1, features.shape[0]]) * a + expr +
                                     (1 / (2 * regul_param * n_points ** 2)) * cp.norm(sp.linalg.sqrtm(representation_d) @ features.T * a) ** 2)
 
             prob = cp.Problem(objective)
@@ -599,7 +599,7 @@ def fista(features, labels, regul_param, representation_d):
         # print('iter: ', curr_iter)
         # print(primal_weight_vector)
         # print('\n')
-        if diff < 1e-6:
+        if diff < 1e-5:
             break
 
         if time.time() - t > 30:
