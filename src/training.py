@@ -51,6 +51,7 @@ class LearningToLearnD:
         printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
                    {'task': -1, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
         self.logger.log_event(printout)
+        hourglass = time.time()
         for task_idx, task in enumerate(data.tr_task_indexes):
             prev_theta = curr_theta
 
@@ -116,9 +117,11 @@ class LearningToLearnD:
             printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
                        {'task': task, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
 
-            self.results['val_score'] = np.nan
-            self.results['test_scores'] = test_scores
-            self.logger.save(self.results)
+            if time.time() - hourglass > 30:
+                self.results['val_score'] = np.nan
+                self.results['test_scores'] = test_scores
+                self.logger.save(self.results)
+                hourglass = time.time()
 
             self.logger.log_event(printout)
         # print(test_scores)

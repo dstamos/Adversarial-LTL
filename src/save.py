@@ -18,7 +18,7 @@ class Logger:
             os.makedirs('logs')
         logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
                             datefmt='%Y-%m-%d %H:%M:%S',
-                            filename="logs/%(date_time)s_" + self.results_filename + ".log" % {'date_time': time.strftime("%Y-%m-%d_%H.%M.%S")}, level=logging.INFO)
+                            filename="logs/" + self.training_info.method + "_" + self.results_filename + "____" + time.strftime("%Y-%m-%d_%H.%M.%S") + ".log", level=logging.INFO)
 
     def save(self, results):
         if not os.path.exists(self.results_full_path):
