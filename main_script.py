@@ -24,6 +24,7 @@ if __name__ == "__main__":
         inner_param_idx = 0
         meta_param_idx = 0
 
+    np.random.seed(seed)
     inner_regul_param_range = [10 ** float(i) for i in np.linspace(-6, 3, 20)]
     meta_regul_param_range = [10 ** float(i) for i in np.linspace(-4, 3, 10)]
 
