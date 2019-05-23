@@ -22,15 +22,17 @@ class LearningToLearnD:
         self.representation_d = None
 
     def fit(self, data):
-        print('LTL | optimizing for inner param: %12f and outer param: %12f' % (self.inner_regul_param, self.meta_algo_regul_param))
+        print(self.training_info.method + ' | optimizing for inner param: %12f and outer param: %12f' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = self.data_info.n_dims
-
-        cvx = True   # True, False
 
         curr_theta = np.zeros((n_dims, n_dims))
         curr_representation_d = np.eye(n_dims) / n_dims
         representation_d = curr_representation_d
 
+        if self.training_info.method == 'LTL_ERM-ERM':
+            cvx = True
+        else:
+            cvx = False
         test_scores = []
         predictions_ts = []
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
@@ -53,6 +55,10 @@ class LearningToLearnD:
             prev_theta = curr_theta
 
             # TODO Try both curr_representation_d and representation_d
+            if self.training_info.method == 'LTL_ERM-SGD' or self.training_info.method == 'LTL_ERM-ERM':
+                cvx = True
+            else:
+                cvx = False
             if cvx is False:
                 loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
                                                     curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
@@ -91,6 +97,10 @@ class LearningToLearnD:
 
             self.representation_d = representation_d
 
+            if self.training_info.method == 'LTL_ERM-ERM':
+                cvx = True
+            else:
+                cvx = False
             predictions_ts = []
             for test_task_idx, test_task in enumerate(data.test_task_indexes):
                 features = data.features_tr[test_task]
@@ -106,19 +116,24 @@ class LearningToLearnD:
             printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
                        {'task': task, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
 
-            if float(np.mean(test_scores)) < -0.2:
-                print('breaking')
-                break
-            self.logger.log_event(printout)
-        print(test_scores)
-        plt.figure(777)
-        plt.clf()
-        plt.plot(test_scores)
-        plt.title('test scores ' + str(self.inner_regul_param) + ' | ' + str(self.meta_algo_regul_param))
-        plt.annotate(str(test_scores[-1]), (self.data_info.n_test_tasks, test_scores[-1]))
-        plt.pause(0.1)
-        plt.savefig('schools-inner_' + str(self.inner_regul_param) + '-outer_' + str(self.meta_algo_regul_param) + '.png')
+            self.results['val_score'] = np.nan
+            self.results['test_scores'] = test_scores
+            self.logger.save(self.results)
 
+            self.logger.log_event(printout)
+        # print(test_scores)
+        # plt.figure(777)
+        # plt.clf()
+        # plt.plot(test_scores)
+        # plt.title('test scores ' + str(self.inner_regul_param) + ' | ' + str(self.meta_algo_regul_param))
+        # plt.annotate(str(test_scores[-1]), (self.data_info.n_test_tasks, test_scores[-1]))
+        # plt.pause(0.1)
+        # plt.savefig('schools-inner_' + str(self.inner_regul_param) + '-outer_' + str(self.meta_algo_regul_param) + '.png')
+
+        if self.training_info.method == 'LTL_ERM-ERM':
+            cvx = True
+        else:
+            cvx = False
         predictions_val = []
         for val_task_idx, val_task in enumerate(data.val_task_indexes):
             features = data.features_tr[val_task]
@@ -474,7 +489,7 @@ def convex_solver_primal(features, labels, regul_param, representation_d):
 
 
 def conex_solver_dual(features, labels, regul_param, representation_d):
-    fista_method = False  # True, False
+    fista_method = True  # True, False
 
     if fista_method is False:
         import cvxpy as cp
@@ -513,7 +528,6 @@ def fista(features, labels, regul_param, representation_d):
     else:
         n_points = len(np.nonzero(labels)[0])
 
-    # TODO Double check this
     largest_eigenval = eigsh(representation_d, k=1, which='LM')[0][0]
     # lipschitz_constant = (largest_eigenval * max([np.linalg.norm(features[i, :]) for i in range(n_points)])) / (regul_param * n_points)
     lipschitz_constant = (largest_eigenval * 1) / (regul_param * n_points)
