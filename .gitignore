@@ -3,11 +3,11 @@
 *.html
 *.pdf
 *.pyc
-*.pckl
 *.log
+*.csv
+*.pckl
 *.swo
 *.xml
-*.csv
 *.txt
 
 # user settings

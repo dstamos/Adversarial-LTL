@@ -5,6 +5,10 @@ from numpy.linalg import norm
 from sklearn.model_selection import train_test_split
 from copy import deepcopy
 import scipy as sp
+import pickle
+from sklearn.preprocessing import normalize
+from operator import itemgetter
+import os
 
 
 class DataHandler:
@@ -29,6 +33,8 @@ class DataHandler:
         elif self.data_info.dataset == 'movielens100k':
             self.full_matrix = None
             self.movielens_gen()
+        elif self.data_info.dataset == 'miniwikipedia':
+            self.miniwikipedia_gen()
 
     def synthetic_data_gen(self):
         sparsity = int(np.round(0.2 * self.data_info.n_dims))
@@ -65,7 +71,6 @@ class DataHandler:
             self.labels_tr[task_idx] = labels_tr
             self.labels_ts[task_idx] = labels_ts
 
-        # FIXME the random seed at the top of main then actually call the random seed at this point
         self.tr_task_indexes = np.arange(0, self.data_info.n_tr_tasks)
         self.val_task_indexes = np.arange(self.data_info.n_tr_tasks, self.data_info.n_tr_tasks + self.data_info.n_val_tasks)
         self.test_task_indexes = np.arange(self.data_info.n_tr_tasks + self.data_info.n_val_tasks, self.data_info.n_all_tasks)
@@ -103,7 +108,6 @@ class DataHandler:
             self.labels_tr[task_idx] = labels_tr
             self.labels_ts[task_idx] = labels_ts
 
-        # FIXME the random seed at the top of main then actually call the random seed at this point
         self.tr_task_indexes = np.arange(0, self.data_info.n_tr_tasks)
         self.val_task_indexes = np.arange(self.data_info.n_tr_tasks, self.data_info.n_tr_tasks + self.data_info.n_val_tasks)
         self.test_task_indexes = np.arange(self.data_info.n_tr_tasks + self.data_info.n_val_tasks, self.data_info.n_all_tasks)
@@ -177,7 +181,6 @@ class DataHandler:
         #     except:
         #         k = 1
 
-        # FIXME the random seed at the top of main then actually call the random seed at this point
         self.tr_task_indexes = shuffled_task_indexes[:self.data_info.n_tr_tasks]
         self.val_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks:self.data_info.n_tr_tasks + self.data_info.n_val_tasks]
         self.test_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks + self.data_info.n_val_tasks:self.data_info.n_all_tasks]
@@ -236,3 +239,107 @@ class DataHandler:
         self.val_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks:self.data_info.n_tr_tasks + self.data_info.n_val_tasks]
         self.test_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks + self.data_info.n_val_tasks:self.data_info.n_all_tasks]
         self.full_matrix = full_matrix
+
+    def miniwikipedia_gen(self):
+        data_path = 'datasets/miniwikinet/'
+
+        def text2cbow(fname, w2v):
+            """returns CBOW text representations from file with "label\ttoken token ... token\n" on each line
+            Args:
+                fname: file name
+                w2v: {word: vector} dict
+            Returns:
+                numpy data array of shape [number of lines, vector dimension], numpy label array of shape [number of lines,]
+            """
+            try:
+                f = open(fname, 'r', encoding='cp1252')
+                loaded_labels, texts = zip(*(line.strip().split('\t') for line in f))
+            except Exception as e:
+                print('switching to utf8 | ' + str(e))
+                f = open(fname, 'r', encoding='utf8')
+                loaded_labels, texts = zip(*(line.strip().split('\t') for line in f))
+
+            dims = len(w2v['god'])
+            x_matrix = np.zeros((len(texts), dims))
+            for text_idx, text in enumerate(texts):
+                pool = []
+                for w in text.split():
+                    curr_embedding = w2v.get(w.lower())
+                    if curr_embedding is not None:
+                        pool.append(curr_embedding)
+                        x_matrix[text_idx, :] = np.sum(pool, axis=0)
+
+            nz = norm(x_matrix, axis=1) > 0.0
+            x_matrix[nz] = normalize(x_matrix[nz])
+            return x_matrix, np.array([int(label) for label in loaded_labels])
+
+        def textfiles(corpus='bal', partition='train', m=32):
+            """returns text file names
+            Args:
+                corpus: which subcorpus to use ('bal' or 'raw')
+                partition: which partition to use ('train', 'dev', or 'test') ; ignored if corpus = 'raw'
+                m: number of data points per class (1, 2, 4, ... , or 32) ; ignored if corpus = 'raw'
+            Returns:
+                list of filenames
+            """
+
+            datadir = data_path + corpus + '/'
+            if corpus == 'bal':
+                datadir += partition + '/' + str(m) + '/'
+            return [datadir + fname for fname, _ in sorted(((fname, int(fname[:-4])) for fname in os.listdir(datadir)), key=itemgetter(1))]
+
+        filenames_tr = textfiles(partition='train')
+        filenames_val = textfiles(partition='dev')
+        filenames_test = textfiles(partition='test')
+        filenames = filenames_tr + filenames_val + filenames_test
+
+        presaved_data = 'datasets/miniwikinet/presaved_50d_picklefile.dat'
+        if os.path.isfile(presaved_data) is True:
+            pack = pickle.load(open(presaved_data, "rb"))
+            all_features, all_labels = pack
+        else:
+            w2v_dict = pickle.load(open('datasets/miniwikinet/glove.6B.50d_dict.pckl', "rb"))
+
+            all_features = [None] * len(filenames)
+            all_labels = [None] * len(filenames)
+            for c_task in range(len(filenames)):
+                x, y = text2cbow(filenames[c_task], w2v_dict)
+                all_features[c_task] = x
+                all_labels[c_task] = y
+            pickle.dump([all_features, all_labels], open(presaved_data, "wb"))
+
+        self.data_info.n_dims = all_features[0].shape[1]
+        shuffled_task_indexes = np.random.permutation(self.data_info.n_all_tasks)
+
+        for task_counter, task in enumerate(shuffled_task_indexes):
+            # loading and normalizing the inputs
+            features = all_features[task]
+            features = features
+
+            # loading the labels
+            labels = all_labels[task].ravel()
+
+            n_points = len(labels)
+
+            if task_counter >= self.data_info.n_tr_tasks:
+                # split into training and test
+                tr_indexes, ts_indexes = train_test_split(np.arange(0, n_points), test_size=self.data_info.ts_points_pct)
+                features_tr = features[tr_indexes]
+                labels_tr = labels[tr_indexes]
+
+                features_ts = features[ts_indexes]
+                labels_ts = labels[ts_indexes]
+
+                self.features_tr[task] = features_tr
+                self.features_ts[task] = features_ts
+                self.labels_tr[task] = labels_tr
+                self.labels_ts[task] = labels_ts
+            else:
+                self.features_tr[task] = features
+                self.labels_tr[task] = labels
+
+        self.tr_task_indexes = shuffled_task_indexes[:self.data_info.n_tr_tasks]
+        self.val_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks:self.data_info.n_tr_tasks + self.data_info.n_val_tasks]
+        self.test_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks + self.data_info.n_val_tasks:self.data_info.n_all_tasks]
+
+
