@@ -4,6 +4,7 @@ from scipy.sparse import csc_matrix
 from numpy.linalg import norm
 from sklearn.model_selection import train_test_split
 from copy import deepcopy
+import scipy as sp
 
 
 class DataHandler:
@@ -13,6 +14,7 @@ class DataHandler:
         self.features_ts = [None] * data_info.n_all_tasks
         self.labels_tr = [None] * data_info.n_all_tasks
         self.labels_ts = [None] * data_info.n_all_tasks
+        self.oracle = None
 
         self.tr_task_indexes = None
         self.val_task_indexes = None
@@ -25,12 +27,14 @@ class DataHandler:
         elif self.data_info.dataset == 'schools':
             self.schools_data_gen()
         elif self.data_info.dataset == 'movielens100k':
+            self.full_matrix = None
             self.movielens_gen()
 
     def synthetic_data_gen(self):
         sparsity = int(np.round(0.2 * self.data_info.n_dims))
         fixed_sparsity = np.random.choice(np.arange(0, self.data_info.n_dims), sparsity, replace=False)
 
+        matrix_w = np.zeros((self.data_info.n_dims, self.data_info.n_all_tasks))
         for task_idx in range(self.data_info.n_all_tasks):
             # generating and normalizing the inputs
             features = np.random.randn(self.data_info.n_all_points, self.data_info.n_dims)
@@ -40,6 +44,8 @@ class DataHandler:
             weight_vector = np.zeros((self.data_info.n_dims, 1))
             weight_vector[fixed_sparsity] = np.random.randn(sparsity, 1)
             weight_vector = (weight_vector / norm(weight_vector)).ravel()  # * np.random.randint(1, 10)
+
+            matrix_w[:, task_idx] = weight_vector
 
             # generating labels and adding noise
             clean_labels = features @ weight_vector
@@ -63,6 +69,8 @@ class DataHandler:
         self.tr_task_indexes = np.arange(0, self.data_info.n_tr_tasks)
         self.val_task_indexes = np.arange(self.data_info.n_tr_tasks, self.data_info.n_tr_tasks + self.data_info.n_val_tasks)
         self.test_task_indexes = np.arange(self.data_info.n_tr_tasks + self.data_info.n_val_tasks, self.data_info.n_all_tasks)
+        matrix_a = sp.linalg.sqrtm(matrix_w @ matrix_w.T)
+        self.oracle = matrix_a / np.trace(matrix_a)
 
     def synthetic_data_gen_biased_sgd_paper(self):
         for task_idx in range(self.data_info.n_all_tasks):
@@ -178,7 +186,6 @@ class DataHandler:
 
         import scipy.io as sio
         temp = sio.loadmat('datasets/ml100kSparse.mat')
-        # full_matrix = temp['fullMatrix'].astype(float).toarray()
         full_matrix = temp['fullMatrix'].astype(float)
 
         # count the number each movie appears in the dataset and remove those that are too rare
@@ -228,3 +235,4 @@ class DataHandler:
         self.tr_task_indexes = shuffled_task_indexes[:self.data_info.n_tr_tasks]
         self.val_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks:self.data_info.n_tr_tasks + self.data_info.n_val_tasks]
         self.test_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks + self.data_info.n_val_tasks:self.data_info.n_all_tasks]
+        self.full_matrix = full_matrix

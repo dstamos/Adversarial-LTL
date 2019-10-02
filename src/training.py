@@ -13,8 +13,8 @@ class LearningToLearnD:
         self.verbose = verbose
         self.data_info = data_info
         self.logger = logger
-        self.meta_algo_regul_param = training_info.inner_regul_param
-        self.inner_regul_param = training_info.meta_algo_regul_param
+        self.meta_algo_regul_param = training_info.meta_algo_regul_param
+        self.inner_regul_param = training_info.inner_regul_param
         self.training_info = training_info
 
         self.results = {'val_score': 0, 'test_scores': []}
@@ -26,21 +26,30 @@ class LearningToLearnD:
         n_dims = self.data_info.n_dims
 
         curr_theta = np.zeros((n_dims, n_dims))
-        curr_representation_d = np.eye(n_dims) / n_dims
+        if self.training_info.method == 'LTL_Oracle-SGD':
+            curr_representation_d = data.oracle
+        else:
+            curr_representation_d = np.eye(n_dims) / n_dims
         representation_d = curr_representation_d
 
         tt = time.time()
         if self.training_info.method == 'LTL_ERM-ERM':
-            cvx = True
+            cvx_val_ts = True
         else:
-            cvx = False
+            cvx_val_ts = False
+
+        if self.training_info.method == 'LTL_ERM-SGD' or self.training_info.method == 'LTL_ERM-ERM':
+            cvx_tr = True
+        else:
+            cvx_tr = False
+
         test_scores = []
         predictions_ts = []
         for test_task_idx, test_task in enumerate(data.test_task_indexes):
             features = data.features_tr[test_task]
             labels = data.labels_tr[test_task]
 
-            if cvx is False:
+            if cvx_val_ts is False:
                 _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
             else:
                 weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
@@ -48,21 +57,14 @@ class LearningToLearnD:
             predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
         test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
 
-        printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
-                   {'task': -1, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
+        printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % {'task': -1, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
         self.logger.log_event(printout)
         hourglass = time.time()
         for task_idx, task in enumerate(data.tr_task_indexes):
             prev_theta = curr_theta
 
-            # TODO Try both curr_representation_d and representation_d
-            if self.training_info.method == 'LTL_ERM-SGD' or self.training_info.method == 'LTL_ERM-ERM':
-                cvx = True
-            else:
-                cvx = False
-            if cvx is False:
-                loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param,
-                                                    curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
+            if cvx_tr is False:
+                loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
             else:
                 with warnings.catch_warnings():
                     loss_subgradient = conex_solver_dual(data.features_tr[task], data.labels_tr[task], self.inner_regul_param, curr_representation_d)
@@ -81,41 +83,35 @@ class LearningToLearnD:
                 matrix_u = np.real(matrix_u)
                 s = np.real(s)
                 s_exp = np.exp(s)
-
                 matrix_m = matrix_u @ np.diag(s_exp) @ matrix_u.T
-
-                # matrix_m = sp.linalg.expm(-curr_theta/self.meta_algo_regul_param)
 
                 # Rescale
                 curr_representation_d = matrix_m / np.trace(matrix_m)
             elif method == 'algo_b':
                 curr_representation_d = - curr_theta/self.meta_algo_regul_param + np.eye(n_dims) / n_dims
-
                 curr_representation_d = psd_trace_projection(curr_representation_d, 1)
 
-            # Average:
-            representation_d = (representation_d * (task_idx + 1) + curr_representation_d * 1) / (task_idx + 2)
+            if self.training_info.method == 'LTL_Oracle-SGD':
+                curr_representation_d = data.oracle
+                representation_d = data.oracle
+            else:
+                # Average:
+                representation_d = (representation_d * (task_idx + 1) + curr_representation_d * 1) / (task_idx + 2)
 
             self.representation_d = representation_d
-
-            if self.training_info.method == 'LTL_ERM-ERM':
-                cvx = True
-            else:
-                cvx = False
             predictions_ts = []
             for test_task_idx, test_task in enumerate(data.test_task_indexes):
                 features = data.features_tr[test_task]
                 labels = data.labels_tr[test_task]
 
-                if cvx is False:
+                if cvx_val_ts is False:
                     _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
                 else:
                     weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
                 predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
             test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
-            printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % \
-                       {'task': task_idx, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
+            printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % {'task': task_idx, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
 
             if time.time() - hourglass > 30:
                 self.results['val_score'] = np.nan
@@ -133,16 +129,12 @@ class LearningToLearnD:
         # plt.pause(0.1)
         # plt.savefig('schools-inner_' + str(self.inner_regul_param) + '-outer_' + str(self.meta_algo_regul_param) + '.png')
 
-        if self.training_info.method == 'LTL_ERM-ERM':
-            cvx = True
-        else:
-            cvx = False
         predictions_val = []
         for val_task_idx, val_task in enumerate(data.val_task_indexes):
             features = data.features_tr[val_task]
             labels = data.labels_tr[val_task]
 
-            if cvx is False:
+            if cvx_val_ts is False:
                 _, weight_vector_val, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
             else:
                 weight_vector_val = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
@@ -152,6 +144,7 @@ class LearningToLearnD:
 
         self.results['val_score'] = val_score
         self.results['test_scores'] = test_scores
+        self.logger.save(self.results)
 
     @staticmethod
     def predict(weight_vector, features):
@@ -204,9 +197,18 @@ class IndipendentTaskLearning:
                 weight_vector = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
             predictions = self.predict(data.features_ts[test_task], weight_vector)
+
+            indeces_of_interest = np.nonzero(np.diag(data.features_ts[test_task].toarray()))[0]
+            for idx_of_interest in indeces_of_interest:
+                column_of_labels_of_interest = data.full_matrix[:, idx_of_interest].toarray()
+                column_of_labels_of_interest[column_of_labels_of_interest == 0] = np.nan
+                means = np.nanmean(column_of_labels_of_interest)
+                predictions[idx_of_interest] = means
+
             predictions_ts.append(predictions)
             print('T: %3d trained | %7.2f' % (test_task_idx, time.time() - tt))
-        test_scores = mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset)
+        test_scores = mtl_scorer([predictions_ts[i][np.nonzero(data.labels_ts[v])] for i, v in enumerate(data.test_task_indexes)],
+                                 [data.labels_ts[i][np.nonzero(data.labels_ts[i])] for i in data.test_task_indexes], dataset=self.data_info.dataset)
 
         printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % \
                    {'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}

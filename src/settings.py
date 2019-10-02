@@ -1,6 +1,3 @@
-import numpy as np
-
-
 class DataSettings:
     def __init__(self, data_dict):
         self.seed = data_dict['seed']

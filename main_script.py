@@ -4,8 +4,6 @@ from src.settings import DataSettings, TrainingSettings
 from src.data_handler import DataHandler
 from src.save import Logger
 from src.training import LearningToLearnD, IndipendentTaskLearning
-from src.multitask_learning import MultitaskLearning
-from copy import deepcopy
 
 
 if __name__ == "__main__":
@@ -20,9 +18,9 @@ if __name__ == "__main__":
     else:
         seed = 999
         dataset_idx = 2  # 0: synthetic, 1: schools, 2: movielens100k
-        method_idx = 3  # 0: ITL_SGD, 1: ITL_ERM, 2: LTL_SGD-SGD, 3: LTL_ERM-SGD, 4: LTL_Oracle-SGD
-        inner_param_idx = 0
-        meta_param_idx = 0
+        method_idx = 0  # 0: ITL_SGD, 1: ITL_ERM, 2: LTL_SGD-SGD, 3: LTL_ERM-SGD, 4: LTL_Oracle-SGD
+        inner_param_idx = 9
+        meta_param_idx = 3
 
     np.random.seed(seed)
     inner_regul_param_range = [10 ** float(i) for i in np.linspace(-6, 3, 20)]
@@ -49,7 +47,7 @@ if __name__ == "__main__":
         data_info_dict = {'dataset': 'movielens100k',
                           'n_tr_tasks': 900,    # 500
                           'n_val_tasks': 2,   # 100
-                          'n_test_tasks': 41,  # 343
+                          'n_test_tasks': 41,  # 343       41
                           'ts_points_pct': 0.25,
                           'seed': seed}
     else:
