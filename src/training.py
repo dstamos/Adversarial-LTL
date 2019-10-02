@@ -216,6 +216,7 @@ class IndipendentTaskLearning:
 
         self.results['val_score'] = test_scores
         self.results['test_scores'] = test_scores
+        self.logger.save(self.results)
 
     @staticmethod
     def predict(features, weight_vector):
@@ -367,72 +368,6 @@ def inner_algo(n_dims, inner_regul_param, representation_d, features, labels, in
         conv = np.abs(curr_epoch_obj - prev_epoch_obj) / prev_epoch_obj
         if conv < 1e-8:
             # print('BREAKING epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
-            break
-
-    if train_plot == 1:
-        plt.figure(999)
-        plt.clf()
-        plt.plot(obj)
-        plt.pause(0.1)
-
-    return subgradient_vector, moving_average_weights, obj
-
-
-def inner_algo_pure(n_dims, inner_regul_param, representation_d, features, labels, inner_algo_method='algo_w', train_plot=0):
-
-    representation_d_inv = np.linalg.pinv(representation_d)
-    total_n_points = features.shape[0]
-
-    if inner_algo_method == 'algo_w':
-        def absolute_loss(curr_features, curr_labels, weight_vector):
-            loss = np.linalg.norm(curr_labels - curr_features @ weight_vector, ord=1)
-            loss = loss / total_n_points
-            return loss
-
-        def penalty(weight_vector):
-            penalty_output = inner_regul_param / 2 * weight_vector @ representation_d_inv @ weight_vector
-            return penalty_output
-
-        def subgradient(label, feature, weight_vector):
-            pred = feature @ weight_vector
-            subgrad = np.sign(pred - label)
-            return subgrad
-    else:
-        raise ValueError("Unknown inner algorithm.")
-
-    curr_weight_vector = np.zeros(n_dims)
-    moving_average_weights = curr_weight_vector
-    obj = []
-
-    curr_obj = 10**10
-    n_iter = 0
-    subgradient_vector = np.zeros(total_n_points)
-    while n_iter < 100 * total_n_points or n_iter < total_n_points:
-        n_iter = n_iter + 1
-        prev_obj = curr_obj
-        prev_weight_vector = curr_weight_vector
-        curr_point = np.random.choice(range(total_n_points), 1)[0]
-
-        # Compute subgradient
-        u = subgradient(labels[curr_point], features[curr_point], prev_weight_vector)
-        subgradient_vector[curr_point] = u
-
-        # Update
-        step = 1 / (inner_regul_param * (n_iter + 1))
-        full_subgrad = representation_d @ features[curr_point, :] * u + inner_regul_param * prev_weight_vector
-        # full_subgrad = features[curr_point_idx, :] * u + inner_regul_param * representation_d_inv * prev_weight_vector
-        curr_weight_vector = prev_weight_vector - step * full_subgrad
-
-        moving_average_weights = (moving_average_weights * (n_iter - 1) + curr_weight_vector * 1) / n_iter
-
-        curr_obj = absolute_loss(features, labels, moving_average_weights) + penalty(moving_average_weights)
-        obj.append(curr_obj)
-        # print('iter %8d | obj: %16.5f | step: %16.8f' % (n_iter, curr_obj, step))
-        # if n_iter % (50 * total_n_points) == 0:
-        #     print('iter %8d | obj: %16.5f | step: %16.8f' % (n_iter, curr_obj, step))
-        conv = np.abs(prev_obj - curr_obj) / prev_obj
-        if conv < 1e-8:
-            # print('Conv tol reached: epoch %8d | obj: %10.5f | step: %16.8f' % (n_iter, curr_obj, step))
             break
 
     if train_plot == 1:

@@ -29,8 +29,8 @@ if __name__ == "__main__":
     if dataset_idx == 0:
         data_info_dict = {'dataset': 'synthetic',
                           'n_tr_tasks': 3000,
-                          'n_val_tasks': 100,
-                          'n_test_tasks': 100,
+                          'n_val_tasks': 300,
+                          'n_test_tasks': 300,
                           'n_all_points': 80,
                           'ts_points_pct': 0.5,
                           'n_dims': 20,
@@ -45,9 +45,9 @@ if __name__ == "__main__":
                           'seed': seed}
     elif dataset_idx == 2:
         data_info_dict = {'dataset': 'movielens100k',
-                          'n_tr_tasks': 900,    # 500
-                          'n_val_tasks': 2,   # 100
-                          'n_test_tasks': 41,  # 343       41
+                          'n_tr_tasks': 500,
+                          'n_val_tasks': 100,
+                          'n_test_tasks': 343,
                           'ts_points_pct': 0.25,
                           'seed': seed}
     else:
