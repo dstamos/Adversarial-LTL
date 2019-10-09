@@ -341,5 +341,3 @@ class DataHandler:
         self.tr_task_indexes = shuffled_task_indexes[:self.data_info.n_tr_tasks]
         self.val_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks:self.data_info.n_tr_tasks + self.data_info.n_val_tasks]
         self.test_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks + self.data_info.n_val_tasks:self.data_info.n_all_tasks]
-
-

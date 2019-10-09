@@ -22,7 +22,7 @@ class LearningToLearnD:
         self.representation_d = None
 
     def fit(self, data):
-        print(self.training_info.method + ' | optimizing for inner param: %12f and outer param: %12f' % (self.inner_regul_param, self.meta_algo_regul_param))
+        print(self.training_info.method + ' | inner param: %12f and outer param: %12f' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = self.data_info.n_dims
 
         curr_theta = np.zeros((n_dims, n_dims))
@@ -50,9 +50,15 @@ class LearningToLearnD:
             labels = data.labels_tr[test_task]
 
             if cvx_val_ts is False:
-                _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
+                if self.data_info.dataset == 'miniwikipedia':
+                    _, weight_vector_ts, _ = inner_algo_classification(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, n_classes=4, train_plot=0)
+                else:
+                    _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
             else:
-                weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
+                if self.data_info.dataset == 'miniwikipedia':
+                    weight_vector_ts = convex_solver_primal_classification(features, labels, self.inner_regul_param, representation_d, n_classes=4)
+                else:
+                    weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
             predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
         test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
@@ -64,14 +70,24 @@ class LearningToLearnD:
             prev_theta = curr_theta
 
             if cvx_tr is False:
-                loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
+                if self.data_info.dataset == 'miniwikipedia':
+                    loss_subgradient, _, _ = inner_algo_classification(self.data_info.n_dims, self.inner_regul_param, curr_representation_d, data.features_tr[task], data.labels_tr[task], n_classes=4, train_plot=0)
+                else:
+                    loss_subgradient, _, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, curr_representation_d, data.features_tr[task], data.labels_tr[task], train_plot=0)
             else:
-                with warnings.catch_warnings():
-                    loss_subgradient = conex_solver_dual(data.features_tr[task], data.labels_tr[task], self.inner_regul_param, curr_representation_d)
+                if self.data_info.dataset == 'miniwikipedia':
+                    raise ValueError("Not implemented.")
+                else:
+                    loss_subgradient = convex_solver_dual(data.features_tr[task], data.labels_tr[task], self.inner_regul_param, curr_representation_d)
 
             # Approximate the gradient
-            g = data.features_tr[task].T @ loss_subgradient
-            approx_grad = - 1 / (2 * self.inner_regul_param * data.features_tr[task].shape[0] ** 2) * np.outer(g, g)
+            if self.data_info.dataset == 'miniwikipedia':
+                g = loss_subgradient
+                gg = g @ g.T
+            else:
+                g = data.features_tr[task].T @ loss_subgradient
+                gg = np.outer(g, g)
+            approx_grad = - gg / (2 * self.inner_regul_param * data.features_tr[task].shape[0] ** 2)
 
             # Update Theta
             curr_theta = prev_theta + approx_grad
@@ -105,9 +121,15 @@ class LearningToLearnD:
                 labels = data.labels_tr[test_task]
 
                 if cvx_val_ts is False:
-                    _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
+                    if self.data_info.dataset == 'miniwikipedia':
+                        _, weight_vector_ts, _ = inner_algo_classification(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, n_classes=4, train_plot=0)
+                    else:
+                        _, weight_vector_ts, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
                 else:
-                    weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
+                    if self.data_info.dataset == 'miniwikipedia':
+                        weight_vector_ts = convex_solver_primal_classification(features, labels, self.inner_regul_param, representation_d, n_classes=4)
+                    else:
+                        weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
                 predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
             test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
@@ -135,9 +157,15 @@ class LearningToLearnD:
             labels = data.labels_tr[val_task]
 
             if cvx_val_ts is False:
-                _, weight_vector_val, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
+                if self.data_info.dataset == 'miniwikipedia':
+                    _, weight_vector_val, _ = inner_algo_classification(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, n_classes=4, train_plot=0)
+                else:
+                    _, weight_vector_val, _ = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, train_plot=0)
             else:
-                weight_vector_val = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
+                if self.data_info.dataset == 'miniwikipedia':
+                    weight_vector_val = convex_solver_primal_classification(features, labels, self.inner_regul_param, representation_d, n_classes=4)
+                else:
+                    weight_vector_val = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
             predictions_val.append(self.predict(weight_vector_val, data.features_ts[val_task]))
         val_score = mtl_scorer(predictions_val, [data.labels_ts[i] for i in data.val_task_indexes], dataset=self.data_info.dataset)
@@ -174,7 +202,7 @@ class IndipendentTaskLearning:
         self.representation_d = None
 
     def fit(self, data):
-        print(self.training_info.method + ' | optimizing for inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
+        print(self.training_info.method + ' | inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
         n_dims = data.data_info.n_dims
 
         representation_d = np.eye(n_dims)
@@ -192,9 +220,15 @@ class IndipendentTaskLearning:
             labels = data.labels_tr[test_task]
 
             if cvx is False:
-                _, weight_vector, obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
+                if self.data_info.dataset == 'miniwikipedia':
+                    _, weight_vector, obj = inner_algo_classification(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels, n_classes=4)
+                else:
+                    _, weight_vector, obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
             else:
-                weight_vector = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
+                if self.data_info.dataset == 'miniwikipedia':
+                    weight_vector = convex_solver_primal_classification(features, labels, self.inner_regul_param, representation_d, n_classes=4)
+                else:
+                    weight_vector = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
             predictions = self.predict(data.features_ts[test_task], weight_vector)
 
@@ -232,7 +266,7 @@ class IndipendentTaskLearning:
         return self
 
 
-def mtl_scorer(predictions, true_labels, dataset=None):
+def mtl_scorer(predictions, true_labels, dataset=None, n_classes=None):
     n_tasks = len(true_labels)
 
     metric = 0
@@ -242,6 +276,21 @@ def mtl_scorer(predictions, true_labels, dataset=None):
             c_metric = mean_absolute_error(true_labels[task_idx][non_zero_idx], predictions[task_idx][non_zero_idx])
         elif dataset == 'schools':
             c_metric = 100 * explained_variance_score(true_labels[task_idx], predictions[task_idx])
+        elif dataset == 'miniwikipedia':
+            def multiclass_hinge_loss(curr_labels, pred_scores):
+                indicator_part = np.ones(pred_scores.shape)
+                indicator_part[np.arange(pred_scores.shape[0]), curr_labels] = 0
+
+                true = pred_scores[np.arange(pred_scores.shape[0]), curr_labels].reshape(-1, 1)
+                true = np.tile(true, (1, n_classes))
+
+                loss = np.max(indicator_part + pred_scores - true, axis=1)
+
+                loss = np.sum(loss) / len(curr_labels)
+
+                return loss
+
+            c_metric = multiclass_hinge_loss(true_labels[task_idx], predictions[task_idx])
         else:
             c_metric = mean_absolute_error(true_labels[task_idx], predictions[task_idx])
 
@@ -428,7 +477,7 @@ def convex_solver_primal(features, labels, regul_param, representation_d):
     return primal_weight_vector
 
 
-def conex_solver_dual(features, labels, regul_param, representation_d):
+def convex_solver_dual(features, labels, regul_param, representation_d):
     fista_method = True  # True, False
 
     if fista_method is False:
@@ -543,3 +592,168 @@ def fista(features, labels, regul_param, representation_d):
             t = time.time()
             print('iter: %6d | tol: %18.15f | step: %12.10f' % (curr_iter, diff, step_size))
     return primal_weight_vector, a
+
+
+def inner_algo_classification(n_dims, inner_regul_param, representation_d, features, labels, inner_algo_method='algo_w', n_classes=None, train_plot=0):
+
+    representation_d_inv = np.linalg.pinv(representation_d)
+
+    total_n_points = features.shape[0]
+
+    if inner_algo_method == 'algo_w':
+        def multiclass_hinge_loss(curr_features, curr_labels, weight_matrix):
+            pred_scores = curr_features @ weight_matrix
+
+            indicator_part = np.ones(pred_scores.shape)
+            indicator_part[np.arange(pred_scores.shape[0]), curr_labels] = 0
+
+            true = pred_scores[np.arange(pred_scores.shape[0]), curr_labels].reshape(-1, 1)
+            true = np.tile(true, (1, 4))
+
+            loss = np.max(indicator_part + pred_scores - true, axis=1)
+
+            loss = np.sum(loss) / total_n_points
+
+            return loss
+
+        def penalty(weight_matrix):
+            penalty_output = inner_regul_param / 2 * np.trace(weight_matrix.T @ representation_d_inv @ weight_matrix)
+            return penalty_output
+
+        def subgradient(label, feature, weight_matrix):
+
+            pred_scores = feature @ weight_matrix
+
+            indicator_part = np.ones(pred_scores.shape)
+            indicator_part[label] = 0
+
+            true = pred_scores[label]
+            true = np.tile(true, (1, 4))
+
+            j_star = np.argmax(indicator_part + pred_scores - true)
+
+            subgrad = np.zeros(weight_matrix.shape)
+
+            if label != j_star:
+                subgrad[:, label] = -feature
+                subgrad[:, j_star] = feature
+
+            return subgrad
+    else:
+        raise ValueError("Unknown inner algorithm.")
+
+    curr_weight_matrix = np.zeros((n_dims, n_classes))
+    moving_average_weights = curr_weight_matrix
+    obj = []
+    subgradients = []
+
+    curr_epoch_obj = 10**10
+    big_fucking_counter = 0
+    for epoch in range(10):
+        subgradients = []
+        prev_epoch_obj = curr_epoch_obj
+        shuffled_points = np.random.permutation(range(features.shape[0]))
+
+        for curr_point_idx, curr_point in enumerate(shuffled_points):
+            big_fucking_counter = big_fucking_counter + 1
+            prev_weight_matrix = curr_weight_matrix
+
+            # Compute subgradient
+            s = subgradient(labels[curr_point], features[curr_point], prev_weight_matrix)
+            subgradients.append(s)
+
+            # Update
+            step = 1 / (inner_regul_param * (epoch * len(shuffled_points) + curr_point_idx + 1 + 1))
+            full_subgrad = representation_d @ s + inner_regul_param * prev_weight_matrix
+            curr_weight_matrix = prev_weight_matrix - step * full_subgrad
+
+            moving_average_weights = (moving_average_weights * (big_fucking_counter + 1) + curr_weight_matrix * 1) / (big_fucking_counter + 2)
+
+            curr_obj = multiclass_hinge_loss(features, labels, curr_weight_matrix) + penalty(curr_weight_matrix)
+            obj.append(curr_obj)
+        # print('epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
+        curr_epoch_obj = obj[-1]
+        conv = np.abs(curr_epoch_obj - prev_epoch_obj) / prev_epoch_obj
+        if conv < 1e-8:
+            # print('BREAKING epoch %5d | obj: %10.5f | step: %16.10f' % (epoch, obj[-1], step))
+            break
+
+    if train_plot == 1:
+        plt.figure(999)
+        plt.clf()
+        plt.plot(obj)
+        plt.pause(0.1)
+
+    final_subgradient = np.sum(subgradients, axis=0)
+
+    return final_subgradient, moving_average_weights, obj
+
+
+def convex_solver_primal_classification(features, labels, regul_param, representation_d, n_classes=None):
+    fista_method = False
+
+    if fista_method is False:
+        import cvxpy as cp
+
+        pinv_d = np.linalg.pinv(representation_d)
+
+        def hinge_loss(curr_features, curr_labels, weight_matrix):
+            pred_scores = weight_matrix * curr_features.T
+
+            indicator_part = np.ones(pred_scores.size)
+            indicator_part[curr_labels, np.arange(pred_scores.size[1])] = 0.0
+
+            true = pred_scores[curr_labels, np.arange(pred_scores.size[1])]
+            temp = np.array(true.value).ravel()
+
+            print(np.repeat(temp, n_classes))
+            temp = np.repeat(temp, n_classes).reshape(n_classes, curr_features.shape[0])
+            print(temp)
+
+            loss = cp.max_entries(indicator_part + pred_scores - temp, axis=1)
+
+            return loss
+
+        if sparse.issparse(features) is False:
+            n_points = features.shape[0]
+        else:
+            n_points = len(np.nonzero(labels)[0])
+        x = cp.Variable(n_classes, features.shape[1])
+        x.value = np.random.randn(n_classes, features.shape[1])
+        objective = cp.Minimize((1 / n_points) * cp.sum_entries(hinge_loss(features, labels, x)) + (regul_param / 2) * cp.trace(x @ pinv_d @ x.T))
+
+        prob = cp.Problem(objective)
+        try:
+            prob.solve()
+        except Exception as e:
+            print(e)
+            prob.solve(solver='SCS')
+        primal_weight_vector = np.array(x.value).ravel()
+    else:
+        primal_weight_vector, _ = fista(features, labels, regul_param, representation_d)
+
+    # Sanity check
+    # if sparse.issparse(features) is False:
+    #     n_points = features.shape[0]
+    # else:
+    #     n_points = len(np.nonzero(labels)[0])
+    #
+    # ################################
+    # # CVX
+    # ################################
+    # import cvxpy as cp
+    # x = cp.Variable(features.shape[1])
+    # objective = cp.Minimize((1 / n_points) * cp.sum_entries(cp.abs(features * x - labels)) + (regul_param / 2) * cp.quad_form(x, np.linalg.pinv(representation_d)))
+    #
+    # prob = cp.Problem(objective)
+    # prob.solve()
+    # primal_weight_vector = np.array(x.value).ravel()
+    # print('cvx: \n', primal_weight_vector)
+    # print('\n')
+    # ################################
+    # # Fista
+    # ################################
+    # primal_weight_vector, _ = fista(features, labels, regul_param, representation_d)
+    # print('fista: \n', primal_weight_vector)
+    # print('\n')
+    return primal_weight_vector
