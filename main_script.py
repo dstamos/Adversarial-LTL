@@ -3,7 +3,7 @@ import sys
 from src.settings import DataSettings, TrainingSettings
 from src.data_handler import DataHandler
 from src.save import Logger
-from src.training import LearningToLearnD, IndipendentTaskLearning
+from src.training import LearningToLearnD, IndipendentTaskLearning, AverageRating
 
 
 if __name__ == "__main__":
@@ -92,7 +92,10 @@ if __name__ == "__main__":
     if training_info.method == 'LTL_SGD-SGD' or training_info.method == 'LTL_ERM-SGD' or training_info.method == 'LTL_Oracle-SGD':
         model = LearningToLearnD(data_info, logger, training_info, verbose=1)
     elif training_info.method == 'ITL_SGD' or training_info.method == 'ITL_ERM':
-        model = IndipendentTaskLearning(data_info, logger, training_info, verbose=1)
+        if data_info.dataset == 'movielens100k':
+            model = AverageRating(data_info, logger, training_info, verbose=1)
+        else:
+            model = IndipendentTaskLearning(data_info, logger, training_info, verbose=1)
     else:
         raise ValueError("Unknown method.")
 

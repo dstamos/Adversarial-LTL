@@ -232,6 +232,72 @@ class IndipendentTaskLearning:
 
             predictions = self.predict(data.features_ts[test_task], weight_vector)
 
+            predictions_ts.append(predictions)
+            print('T: %3d/%3d trained | %7.2f' % (test_task_idx, len(data.test_task_indexes), time.time() - tt))
+        if self.data_info.dataset == 'miniwikipedia':
+            test_scores = mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset, n_classes=4)
+        else:
+            test_scores = mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset)
+
+        printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % {'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
+        self.logger.log_event(printout)
+
+        self.results['val_score'] = test_scores
+        self.results['test_scores'] = test_scores
+        self.logger.save(self.results)
+
+    @staticmethod
+    def predict(features, weight_vector):
+        predictions = features @ weight_vector
+        return predictions
+
+    def get_params(self):
+        return {"meta_algo_regul_param": self.meta_algo_regul_param, "inner_regul_param": self.inner_regul_param}
+
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        return self
+
+
+class AverageRating:
+    def __init__(self, data_info, logger, training_info, verbose=1):
+        self.verbose = verbose
+        self.data_info = data_info
+        self.logger = logger
+        self.meta_algo_regul_param = training_info.meta_algo_regul_param
+        self.inner_regul_param = training_info.inner_regul_param
+        self.training_info = training_info
+
+        self.results = {'val_score': 0, 'test_scores': []}
+
+        self.representation_d = None
+
+    def fit(self, data):
+        print(self.training_info.method + ' | inner param: %8e and outer param: %8e' % (self.inner_regul_param, self.meta_algo_regul_param))
+        n_dims = data.data_info.n_dims
+
+        representation_d = np.eye(n_dims)
+
+        self.representation_d = representation_d
+
+        predictions_ts = []
+        tt = time.time()
+        for test_task_idx, test_task in enumerate(data.test_task_indexes):
+            if self.training_info.method == 'ITL_ERM':
+                cvx = True  # True, False
+            else:
+                cvx = False
+            features = data.features_tr[test_task]
+            labels = data.labels_tr[test_task]
+
+            if cvx is False:
+                _, weight_vector, obj = inner_algo(self.data_info.n_dims, self.inner_regul_param, representation_d, features, labels)
+            else:
+                weight_vector = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
+
+            predictions = self.predict(data.features_ts[test_task], weight_vector)
+
             indeces_of_interest = np.nonzero(np.diag(data.features_ts[test_task].toarray()))[0]
             for idx_of_interest in indeces_of_interest:
                 column_of_labels_of_interest = data.full_matrix[:, idx_of_interest].toarray()
@@ -240,12 +306,11 @@ class IndipendentTaskLearning:
                 predictions[idx_of_interest] = means
 
             predictions_ts.append(predictions)
-            print('T: %3d trained | %7.2f' % (test_task_idx, time.time() - tt))
+            print('T: %3d/%3d trained | %7.2f' % (test_task_idx, len(data.test_task_indexes), time.time() - tt))
         test_scores = mtl_scorer([predictions_ts[i][np.nonzero(data.labels_ts[v])] for i, v in enumerate(data.test_task_indexes)],
                                  [data.labels_ts[i][np.nonzero(data.labels_ts[i])] for i in data.test_task_indexes], dataset=self.data_info.dataset)
 
-        printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % \
-                   {'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
+        printout = "test score: %(ts_score)6.4f | time: %(time)7.2f" % {'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
         self.logger.log_event(printout)
 
         self.results['val_score'] = test_scores
@@ -682,7 +747,7 @@ def inner_algo_classification(n_dims, inner_regul_param, representation_d, featu
         plt.figure(999)
         plt.clf()
         plt.plot(obj)
-        plt.pause(0.1)
+        plt.pause(0.25)
 
     final_subgradient = np.sum(subgradients, axis=0)
 
