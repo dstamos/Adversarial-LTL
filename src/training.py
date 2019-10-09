@@ -61,7 +61,10 @@ class LearningToLearnD:
                     weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
             predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
-        test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
+        if self.data_info.dataset == 'miniwikipedia':
+            test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset, n_classes=4))
+        else:
+            test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
 
         printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % {'task': -1, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
         self.logger.log_event(printout)
@@ -132,7 +135,10 @@ class LearningToLearnD:
                         weight_vector_ts = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
                 predictions_ts.append(self.predict(weight_vector_ts, data.features_ts[test_task]))
-            test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
+            if self.data_info.dataset == 'miniwikipedia':
+                test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset, n_classes=4))
+            else:
+                test_scores.append(mtl_scorer(predictions_ts, [data.labels_ts[i] for i in data.test_task_indexes], dataset=self.data_info.dataset))
             printout = "T: %(task)3d | test score: %(ts_score)8.4f | time: %(time)7.2f" % {'task': task_idx, 'ts_score': float(np.mean(test_scores)), 'time': float(time.time() - tt)}
 
             if time.time() - hourglass > 30:
@@ -168,7 +174,10 @@ class LearningToLearnD:
                     weight_vector_val = convex_solver_primal(features, labels, self.inner_regul_param, representation_d)
 
             predictions_val.append(self.predict(weight_vector_val, data.features_ts[val_task]))
-        val_score = mtl_scorer(predictions_val, [data.labels_ts[i] for i in data.val_task_indexes], dataset=self.data_info.dataset)
+        if self.data_info.dataset == 'miniwikipedia':
+            val_score = mtl_scorer(predictions_val, [data.labels_ts[i] for i in data.val_task_indexes], dataset=self.data_info.dataset, n_classes=4)
+        else:
+            val_score = mtl_scorer(predictions_val, [data.labels_ts[i] for i in data.val_task_indexes], dataset=self.data_info.dataset)
 
         self.results['val_score'] = val_score
         self.results['test_scores'] = test_scores
@@ -356,6 +365,10 @@ def mtl_scorer(predictions, true_labels, dataset=None, n_classes=None):
                 return loss
 
             c_metric = multiclass_hinge_loss(true_labels[task_idx], predictions[task_idx])
+
+            # from sklearn.metrics import hinge_loss
+            # labels = np.array([0, 1, 2, 3])
+            # c_metric = hinge_loss(true_labels[task_idx], predictions[task_idx], labels)
         else:
             c_metric = mean_absolute_error(true_labels[task_idx], predictions[task_idx])
 
