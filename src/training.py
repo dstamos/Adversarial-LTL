@@ -345,7 +345,7 @@ def mtl_scorer(predictions, true_labels, dataset=None, n_classes=None):
 
     metric = 0
     for task_idx in range(n_tasks):
-        if dataset == 'movielens100k':
+        if dataset == 'movielens100k' or dataset == 'jester1':
             non_zero_idx = np.nonzero(true_labels[task_idx])[0]
             c_metric = mean_absolute_error(true_labels[task_idx][non_zero_idx], predictions[task_idx][non_zero_idx])
         elif dataset == 'schools':

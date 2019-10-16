@@ -18,9 +18,9 @@ if __name__ == "__main__":
     else:
         seed = 999
         dataset_idx = 3  # 0: synthetic, 1: schools, 2: movielens100k, 3: miniwikipedia
-        method_idx = 0  # 0: ITL_SGD, 1: ITL_ERM, 2: LTL_SGD-SGD, 3: LTL_ERM-SGD, 4: LTL_Oracle-SGD
-        inner_param_idx = 9
-        meta_param_idx = 3
+        method_idx = 5  # 0: ITL_SGD, 1: ITL_ERM, 2: LTL_SGD-SGD, 3: LTL_ERM-SGD, 4: LTL_Oracle-SGD, 5: LTL_ERM-SGD
+        inner_param_idx = 5
+        meta_param_idx = 5
 
     np.random.seed(seed)
     inner_regul_param_range = [10 ** float(i) for i in np.linspace(-6, 3, 20)]
@@ -57,6 +57,13 @@ if __name__ == "__main__":
                           'n_test_tasks': 213,
                           'ts_points_pct': 0.25,
                           'seed': seed}
+    elif dataset_idx == 4:
+        data_info_dict = {'dataset': 'jester1',
+                          'n_tr_tasks': 3000,    # 24983 (full)
+                          'n_val_tasks': 10,   #
+                          'n_test_tasks': 200,  #
+                          'ts_points_pct': 0.25,
+                          'seed': seed}
     else:
         raise ValueError('Unknown dataset.')
 
@@ -80,6 +87,10 @@ if __name__ == "__main__":
         training_info_dict = {'method': 'LTL_Oracle-SGD',
                               'inner_regul_param': inner_regul_param_range[inner_param_idx],
                               'meta_algo_regul_param': meta_regul_param_range[meta_param_idx]}
+    elif method_idx == 5:
+        training_info_dict = {'method': 'LTL_ERM-ERM',
+                              'inner_regul_param': inner_regul_param_range[inner_param_idx],
+                              'meta_algo_regul_param': meta_regul_param_range[meta_param_idx]}
     else:
         raise ValueError('Unknown method.')
 
@@ -89,10 +100,10 @@ if __name__ == "__main__":
 
     logger = Logger(data_info, training_info, training_info.inner_regul_param, training_info.meta_algo_regul_param)
 
-    if training_info.method == 'LTL_SGD-SGD' or training_info.method == 'LTL_ERM-SGD' or training_info.method == 'LTL_Oracle-SGD':
+    if training_info.method == 'LTL_SGD-SGD' or training_info.method == 'LTL_ERM-SGD' or training_info.method == 'LTL_Oracle-SGD' or training_info.method == 'LTL_ERM-ERM':
         model = LearningToLearnD(data_info, logger, training_info, verbose=1)
     elif training_info.method == 'ITL_SGD' or training_info.method == 'ITL_ERM':
-        if data_info.dataset == 'movielens100k':
+        if data_info.dataset == 'movielens100k' or data_info.dataset == 'jester1':
             model = AverageRating(data_info, logger, training_info, verbose=1)
         else:
             model = IndipendentTaskLearning(data_info, logger, training_info, verbose=1)
