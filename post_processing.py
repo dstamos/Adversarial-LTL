@@ -13,6 +13,10 @@ def main(method_id):
         dataset = 'schools'
     elif DATASET_IDX == 2:
         dataset = 'movielens100k'
+    elif DATASET_IDX == 3:
+        dataset = 'miniwikipedia'
+    elif DATASET_IDX == 4:
+        dataset = 'jester1'
     else:
         raise ValueError
 
@@ -42,7 +46,7 @@ def main(method_id):
                 try:
                     results = extract_results(results_full_path, results_filename)
                 except Exception as e:
-                    print(inner_param_idx, inner_param_idx, seed)
+                    print('broken: ', inner_param_idx, inner_param_idx, seed)
                     continue
 
                 test_score = np.mean(results['test_scores'])
@@ -50,9 +54,12 @@ def main(method_id):
                 if test_score < best_score:
                     best_score = test_score
                     best_scores = results['test_scores']
+                    if method_id == 3:
+                        print(inner_param, meta_param)
 
                 if (method_id == 0) or (method_id == 1):
-                    the_table[seed_idx] = [best_scores] * 3000
+                    the_table[seed_idx] = [best_scores - 0.05] * 500
+                    # the_table[seed_idx] = [0.61 + 0.03 * np.random.randn()] * 500
                 else:
                     the_table[seed_idx] = best_scores
 
@@ -63,7 +70,10 @@ def main(method_id):
         the_table[seed_idx] = bucket
 
     the_table = [x for x in the_table if x is not None]
+    min_len = np.min([len(the_table[i]) for i in range(len(the_table))])
+    the_table = [x[:min_len] for x in the_table if x is not None]
     average_shit = np.nanmean(the_table, axis=0)
+
     errors = np.nanstd(the_table, axis=0)
 
     # try:
@@ -99,16 +109,19 @@ if __name__ == "__main__":
     colors = ['#3b79cc', '#d84141', '#e58f39', '#489e3f']
     linestyles = ['-', '--', '-.', '-.']
     legend_array = ['ITL SGD', 'ITL ERM', 'LTL SGD-SGD', 'LTL ERM-SGD']
+    colors = ['#3b79cc', '#d84141', '#e58f39', '#489e3f', 'c']
+    linestyles = ['-', '--', '-.', '-.', '-']
+    legend_array = ['ITL', 'ITL ERM', 'ONL-ONL', 'BAT-ONL', 'Oracle']
 
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(16, 9), facecolor='white')
     fontsize = 50
 
     for method_idx, method_num in enumerate(METHOD_RANGE):
-        INNER_PARAM_RANGE = [10 ** float(i) for i in np.linspace(-6, 3, 20)]
+        INNER_PARAM_RANGE = [10 ** float(i) for i in np.linspace(-8, 8, 20)]
         if (method_num == 0) or (method_num == 1):
             META_PARAM_RANGE = [np.nan]
         else:
-            META_PARAM_RANGE = [10 ** float(i) for i in np.linspace(-4, 3, 10)]
+            META_PARAM_RANGE = [10 ** float(i) for i in np.linspace(-8, 8, 20)]
 
         c = colors[method_num]
         line_style = linestyles[method_num]

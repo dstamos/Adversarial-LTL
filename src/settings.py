@@ -21,5 +21,5 @@ class TrainingSettings:
         self.inner_regul_param = training_dict['inner_regul_param']
         self.meta_algo_regul_param = training_dict['meta_algo_regul_param']
 
-        if self.method == 'LTL_SGD-SGD' or self.method == 'LTL_ERM-SGD' or self.method == 'LTL_Oracle-SGD':
+        if self.method == 'LTL_SGD-SGD' or self.method == 'LTL_ERM-SGD' or self.method == 'LTL_Oracle-SGD' or self.method == 'LTL_ERM-ERM':
             self.meta_algo_regul_param = training_dict['meta_algo_regul_param']

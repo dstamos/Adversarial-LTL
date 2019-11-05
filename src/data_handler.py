@@ -33,6 +33,9 @@ class DataHandler:
         elif self.data_info.dataset == 'movielens100k':
             self.full_matrix = None
             self.movielens_gen()
+        elif self.data_info.dataset == 'jester1':
+            self.full_matrix = None
+            self.jester_gen()
         elif self.data_info.dataset == 'miniwikipedia':
             self.miniwikipedia_gen()
 
@@ -203,12 +206,57 @@ class DataHandler:
         self.data_info.n_dims = n_movies
         shuffled_task_indexes = np.random.permutation(self.data_info.n_all_tasks)
 
-        # TODO Sparsify everything for speed-up?
         for task_counter, user in enumerate(shuffled_task_indexes):
             # loading and normalizing the inputs
             zero_indexes = np.where(full_matrix[user, :].toarray() == 0)[1]
             non_zero_indexes = np.nonzero(full_matrix[user, :])[1]
             features = csc_matrix(np.eye(n_movies))
+            features[zero_indexes, zero_indexes] = 0
+
+            # loading the labels
+            labels = full_matrix[user, :].toarray().ravel()
+
+            if task_counter >= self.data_info.n_tr_tasks:
+                # split into training and test
+                tr_indexes, ts_indexes = train_test_split(non_zero_indexes, test_size=self.data_info.ts_points_pct)
+                features_tr = deepcopy(features)
+                labels_tr = deepcopy(labels)
+                features_tr[ts_indexes, ts_indexes] = 0
+                labels_tr[ts_indexes] = 0
+
+                features_ts = deepcopy(features)
+                labels_ts = deepcopy(labels)
+                features_ts[tr_indexes, tr_indexes] = 0
+                labels_ts[tr_indexes] = 0
+
+                self.features_tr[user] = features_tr
+                self.features_ts[user] = features_ts
+                self.labels_tr[user] = labels_tr
+                self.labels_ts[user] = labels_ts
+            else:
+                self.features_tr[user] = deepcopy(features)
+                self.labels_tr[user] = deepcopy(labels)
+
+        self.tr_task_indexes = shuffled_task_indexes[:self.data_info.n_tr_tasks]
+        self.val_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks:self.data_info.n_tr_tasks + self.data_info.n_val_tasks]
+        self.test_task_indexes = shuffled_task_indexes[self.data_info.n_tr_tasks + self.data_info.n_val_tasks:self.data_info.n_all_tasks]
+        self.full_matrix = full_matrix
+
+    def jester_gen(self):
+
+        import scipy.io as sio
+        temp = sio.loadmat('datasets/' + self.data_info.dataset + 'Sparse.mat')
+        full_matrix = temp[self.data_info.dataset + 'Sparse'].astype(float)
+
+        n_jokes = full_matrix.shape[1]
+        self.data_info.n_dims = n_jokes
+        shuffled_task_indexes = np.random.permutation(self.data_info.n_all_tasks)
+
+        for task_counter, user in enumerate(shuffled_task_indexes):
+            # loading and normalizing the inputs
+            zero_indexes = np.where(full_matrix[user, :].toarray() == 0)[1]
+            non_zero_indexes = np.nonzero(full_matrix[user, :])[1]
+            features = csc_matrix(np.eye(n_jokes))
             features[zero_indexes, zero_indexes] = 0
 
             # loading the labels

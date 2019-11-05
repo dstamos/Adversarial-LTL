@@ -7,7 +7,6 @@ from src.training import LearningToLearnD, IndipendentTaskLearning, AverageRatin
 
 
 if __name__ == "__main__":
-    np.random.seed(999)
 
     if len(sys.argv) > 1:
         seed = int(sys.argv[1])
@@ -17,20 +16,19 @@ if __name__ == "__main__":
         meta_param_idx = int(sys.argv[5])
     else:
         seed = 999
-        dataset_idx = 3  # 0: synthetic, 1: schools, 2: movielens100k, 3: miniwikipedia
-        method_idx = 5  # 0: ITL_SGD, 1: ITL_ERM, 2: LTL_SGD-SGD, 3: LTL_ERM-SGD, 4: LTL_Oracle-SGD, 5: LTL_ERM-SGD
-        inner_param_idx = 5
-        meta_param_idx = 5
-
+        dataset_idx = 2  # 0: synthetic, 1: schools, 2: movielens100k, 3: miniwikipedia, 4: jester1
+        method_idx = 1  # 0: ITL_SGD, 1: ITL_ERM, 2: LTL_SGD-SGD, 3: LTL_ERM-SGD, 4: LTL_Oracle-SGD, 5: LTL_ERM-ERM
+        inner_param_idx = 2
+        meta_param_idx = 10
     np.random.seed(seed)
-    inner_regul_param_range = [10 ** float(i) for i in np.linspace(-6, 3, 20)]
-    meta_regul_param_range = [10 ** float(i) for i in np.linspace(-4, 3, 10)]
+    inner_regul_param_range = [10 ** float(i) for i in np.linspace(-8, 8, 20)]
+    meta_regul_param_range = [10 ** float(i) for i in np.linspace(-8, 8, 20)]
 
     if dataset_idx == 0:
         data_info_dict = {'dataset': 'synthetic',
                           'n_tr_tasks': 3000,
-                          'n_val_tasks': 300,
-                          'n_test_tasks': 300,
+                          'n_val_tasks': 100,
+                          'n_test_tasks': 500,
                           'n_all_points': 80,
                           'ts_points_pct': 0.5,
                           'n_dims': 20,
@@ -45,23 +43,23 @@ if __name__ == "__main__":
                           'seed': seed}
     elif dataset_idx == 2:
         data_info_dict = {'dataset': 'movielens100k',
-                          'n_tr_tasks': 500,
+                          'n_tr_tasks': 700,
                           'n_val_tasks': 100,
-                          'n_test_tasks': 343,
+                          'n_test_tasks': 139,
                           'ts_points_pct': 0.25,
                           'seed': seed}
     elif dataset_idx == 3:
         data_info_dict = {'dataset': 'miniwikipedia',
                           'n_tr_tasks': 500,  # 813 total
-                          'n_val_tasks': 100,
-                          'n_test_tasks': 213,
+                          'n_val_tasks': 100,  # 100
+                          'n_test_tasks': 213,  # 213
                           'ts_points_pct': 0.25,
                           'seed': seed}
     elif dataset_idx == 4:
         data_info_dict = {'dataset': 'jester1',
-                          'n_tr_tasks': 3000,    # 24983 (full)
-                          'n_val_tasks': 10,   #
-                          'n_test_tasks': 200,  #
+                          'n_tr_tasks': 5000,    # 24983 (full)
+                          'n_val_tasks': 200,   #
+                          'n_test_tasks': 500,  #
                           'ts_points_pct': 0.25,
                           'seed': seed}
     else:
