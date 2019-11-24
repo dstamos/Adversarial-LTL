@@ -1,6 +1,17 @@
 # Online-Within-Online Meta-Learning - NeurIPS 2019
-We study the interplay between surrogate methods for structured prediction and techniques from multitask learning designed to leverage relationships between surrogate outputs. We propose an efficient algorithm based on trace norm regularization which, differently from previous methods, does not require explicit knowledge of the coding/decoding functions of the surrogate framework. As a result, our algorithm can be applied to the broad class of problems in which the surrogate space is large or even infinite dimensional. We study excess risk bounds for trace norm regularized structured prediction, implying the consistency and learning rates for our estimator. We also identify relevant regimes in which our approach can enjoy better generalization performance than previous methods. Numerical experiments on ranking problems indicate that enforcing low-rank relations among surrogate outputs may indeed provide a significant advantage in practice.
-
+We study the problem of learning a series of tasks in a fully online Meta-Learning
+setting. The goal is to exploit similarities among the tasks to incrementally adapt
+an inner online algorithm in order to incur a low averaged cumulative error over
+the tasks. We focus on a family of inner algorithms based on a parametrized
+variant of online Mirror Descent. The inner algorithm is incrementally adapted
+by an online Mirror Descent meta-algorithm using the corresponding within-task
+minimum regularized empirical risk as the meta-loss. In order to keep the process
+fully online, we approximate the meta-subgradients by the online inner algorithm.
+An upper bound on the approximation error allows us to derive a cumulative
+error bound for the proposed method. Our analysis can also be converted to the
+statistical setting by online-to-batch arguments. We instantiate two examples of the
+framework in which the meta-parameter is either a common bias vector or feature
+map. Finally, preliminary numerical experiments confirm our theoretical findings.
 
 ## Requirements
 
