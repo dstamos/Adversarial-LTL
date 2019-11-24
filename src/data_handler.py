@@ -191,7 +191,7 @@ class DataHandler:
     def movielens_gen(self):
 
         import scipy.io as sio
-        temp = sio.loadmat('datasets/ml100kSparse.mat')
+        temp = sio.loadmat('datasets/ml100kSparse.mat') 
         full_matrix = temp['fullMatrix'].astype(float)
 
         # count the number each movie appears in the dataset and remove those that are too rare

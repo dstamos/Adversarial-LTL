@@ -19,3 +19,5 @@ _pycache_/
 results/
 logs/
 archive/
+plots.py
+plots_synth.py
